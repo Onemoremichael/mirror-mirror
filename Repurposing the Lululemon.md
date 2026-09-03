@@ -4,15 +4,17 @@
 > identified `HWID 0x007060e100000000` and public-key hash
 > `35ac01e7ee8478261aea5134e07e45cb6c5621d42716c15bb10dee0c53d65759`.
 > This is **not** the common Qualcomm unfused-development hash cited below.
-> Treat this unit as requiring an exact signed Firehose programmer unless a
-> later secure-boot query proves otherwise. The earlier “almost certainly
-> unfused” assessment was a hypothesis and is contradicted by this evidence.
-> No partition writes have been attempted.
+> A public `cc3153...` MSM8916 programmer reached Sahara image transfer, but
+> the ROM stopped responding after requesting its ELF metadata and hash table.
+> Firehose never started and no partition access occurred. Treat this unit as
+> secure-boot-enforced and requiring a programmer signed for the exact
+> `35ac...` root. The earlier “almost certainly unfused” assessment was a
+> hypothesis and is contradicted by the observed hardware.
 
 ## TL;DR
-- **Root the stock Android on the original board — don't flash a custom OS.** The Snapdragon 410E (APQ8016E) in the Model One is almost certainly an *unfused* (secure-boot-disabled) part, which means its bootloader chain accepts self-signed images and — critically — Qualcomm EDL (9008) mode gives you a full, unbrickable read/write path to the eMMC. Rooting stock Android preserves the working driver for the Samsung LTI400HN01 LVDS panel; flashing DragonBoard/postmarketOS images will almost certainly break the display because that panel needs a custom DSI-to-LVDS bridge driver that no generic image ships.
-- **Your attack ladder, least to most invasive:** (1) ADB over the USB port, (2) fastboot unlock, (3) 1.8 V UART serial console (the single highest-value step), (4) EDL/9008 full eMMC dump + Magisk-patched boot re-flash, (5) direct eMMC/JTAG as last resort. Take a **full EDL backup before writing anything** — that is your safety net.
-- **Realistic outcome:** rooted stock Android running a browser/MagicMirror kiosk app is the likely best case and is very achievable given how open this hardware is. Full custom OS with working display is possible but a large device-tree project. If everything fails, the community fallback — a ~$24 generic HDMI/LVDS controller board — still works.
+- **Keep the stock Android/display stack if a shell can be obtained.** It already contains the driver and timings for the Samsung LTI400HN01 LVDS panel. A generic DragonBoard/postmarketOS image will not. However, this tested unit has a unique OEM key hash and rejected the public Qualcomm-signed programmer, so arbitrary boot-image flashing is not currently available.
+- **Updated attack ladder:** (1) authorized ADB if a stock UI or recovery path exposes the RSA prompt, (2) 1.8 V UART boot-log capture and console testing, (3) search firmware/service materials for a Firehose programmer signed for the observed `35ac...` root, (4) only after a verified full backup, consider a stock-boot patch. Direct eMMC/JTAG and replacing the controller board remain last-resort paths.
+- **Realistic outcome:** root on the original Android board is still worth pursuing, but is conditional on UART yielding a console, finding a stock vulnerability, or locating the matching signed programmer. The proven fallback is a generic HDMI/LVDS controller driven by an external computer.
 
 ---
 
@@ -22,7 +24,7 @@
 
 2. **The SoC is extremely well-documented.** The APQ8016E is the same silicon as the DragonBoard 410c reference board, with full public LK/aboot bootloader source (Linaro/CodeAurora), U-Boot support, Linaro Debian, Android 5.1, mainline Linux (msm8916-mainline), and postmarketOS. That means firehose programmers, signing tools, and bootloader knowledge are all public.
 
-3. **Secure boot is very likely OFF.** MSM8916 consumer and embedded parts frequently ship unfused. EDL tooling reports a default public-key hash `0xcc3153a80293939b90d02d3bf8b23e0292e452fef662c74998421adad42a380f` on unfused MSM8916/8909 devices, with `Auth_Enabled: False`. If your unit reports this, you can self-sign and flash a custom aboot/LK and the whole device is open. Trusted-Firmware-A's Qualcomm MSM8916 port documentation states verbatim: *"The DragonBoard 410c does not have secure boot enabled by default"* — i.e., unfused is the normal state for this silicon family. (That same doc warns the port "is not secure... the hardware used for memory protection is not described in the APQ8016E documentation.")
+3. **The tested Mirror is not an unfused DragonBoard.** Some MSM8916 development boards report the default public-key hash `0xcc3153a80293939b90d02d3bf8b23e0292e452fef662c74998421adad42a380f`, but this unit reports the OEM-specific `35ac01e7...d65759` hash. Its ROM requested the signed metadata from a public `cc3153...` programmer and then stopped responding, which strongly indicates that secure-boot authentication is enforced. DragonBoard 410c defaults therefore cannot be generalized to production Mirror hardware.
 
 4. **The display is the whole payoff, and it argues for the least-invasive path.** The MSM8916 outputs MIPI DSI. A 40" 1080p LVDS panel (LTI400HN01) requires a DSI-to-LVDS bridge chip (Toshiba TC358775 at I²C 0x0f, or TI SN65DSI83/84 at 0x2c/0x2d) on the Mirror's board. The stock kernel already has the exact driver + timings + backlight config for this panel. A generic custom OS does not. **Keep the stock kernel; just get root.**
 
@@ -49,7 +51,7 @@ The Adreno 306 GPU supports OpenGL ES 3.0, OpenCL 1.1, and DirectX 9.3 but **lac
 - **In EDL/Sahara**: bkerler/edl prints the `PK_HASH`. The value `0xcc3153a80293939b90d02d3bf8b23e0292e452fef662c74998421adad42a380f` is the default seen across unfused MSM8916/8909 units; the `secureboot` sub-command shows `Auth_Enabled: False` for each Sec_Boot region. bkerler's own writeup notes that if the tool reports secure boot disabled, the device's firmware can be freely modified.
 - **Trusted-Firmware-A** confirms unfused is the norm for this family (quoted above).
 
-If secure boot **is** enforced on your unit (unique PK_HASH, `Auth_Enabled: True`, `fastboot getvar secure` = yes), you cannot flash custom bootloaders — but you can still read the eMMC in EDL and, if the stock build is debuggable, get root without changing the bootloader.
+If secure boot **is** enforced on your unit (unique PK_HASH, `Auth_Enabled: True`, `fastboot getvar secure` = yes), you cannot flash custom bootloaders. EDL storage access also requires a Firehose programmer accepted by that OEM root; a random MSM8916 programmer is not sufficient.
 
 ### 2. Access vectors, least to most invasive
 
@@ -66,10 +68,10 @@ If secure boot **is** enforced on your unit (unique PK_HASH, `Auth_Enabled: True
 - Find the pads: look for a group of 3–4 test points/vias near the SoC or PMIC, sometimes silkscreened TX/RX/GND/RXD/TXD. Confirm GND with a multimeter in continuity mode against a shield/ground. Find TX by watching for a pin that idles high (at 1.8 V) and **pulses during power-on** ("the voltage fluctuates for a few seconds and then stabilizes at the VCC value... the device sends serial data through that TX pin for debugging"). RX is usually the adjacent quiet pin. A logic analyzer + PulseView lets you measure the bit width to confirm baud before you connect.
 - What the log reveals: SBL version, "Secure boot" status line, LK/aboot version, the kernel command line (including `androidboot.verifiedbootstate` and whether `ro.boot.secure` is set), and DTB/board-id. If autoboot can be interrupted, you may get an aboot/LK fastboot prompt; if the kernel console is a getty and the build is debuggable, you may get a root shell directly.
 
-**(d) Qualcomm EDL / 9008 mode — the unbrickable path.** EDL is a SoC-ROM download mode. Enter it via `adb reboot edl`, `fastboot oem edl`, or by **shorting two EDL test points to ground while applying power** (on MSM8916 boards these are usually a pair of pads near the eMMC/SoC, often shorted with tweezers or a jumper as USB is connected). The XDA poster on the sibling board found pads labeled `PROG` — on your APQ8016E board, look for a similar labeled/unlabeled pad pair. Once in 9008:
+**(d) Qualcomm EDL / 9008 mode — useful only with an accepted programmer.** EDL is a SoC-ROM download mode. Enter it via `adb reboot edl`, `fastboot oem edl`, or by **shorting two EDL test points to ground while applying power** (on MSM8916 boards these are usually a pair of pads near the eMMC/SoC, often shorted with tweezers or a jumper as USB is connected). The XDA poster on the sibling board found pads labeled `PROG` — on your APQ8016E board, look for a similar labeled/unlabeled pad pair. Once in 9008:
 - The host sees a "Qualcomm HS-USB QDLoader 9008" device.
 - You upload a signed **Firehose programmer** (`prog_emmc_firehose_8916.mbn`) via the **Sahara** protocol (the bootrom stage that uploads the loader into RAM); **Firehose** then does full eMMC read/write.
-- **Signed 8916 firehose programmers are widely available** — extracted from dozens of shipping MSM8916 phones and mirrored publicly (e.g. `github.com/OneLabsTools/Programmers/prog_emmc_firehose_8916.mbn`, plus Hovatek and mobilerdx collections). This is the single most important enabler: the eMMC is fully readable/writable regardless of ADB/fastboot state. A real MSM8916 EDL session confirms the flow: "sahara - Uploading loader prog_emmc_firehose_8916.mbn... Successfully uploaded programmer :). firehose_client - Target detected: MSM8916."
+- Signed 8916 Firehose programmers are widely available, but signatures are OEM-root-specific. On the tested Mirror, bkerler's exact-HWID public `cc3153...` programmer was rejected before Firehose began. Do not infer compatibility from the chipset or HWID alone: both the HWID and the programmer signing-root hash must match.
 - **Tools:** `bkerler/edl` (open-source Python, Linux/Win/Mac) is the recommended client; QFIL/QPST (Qualcomm, Windows) is the alternative.
 
 Example edl.py commands (Linux):
@@ -136,15 +138,15 @@ edl w boot magisk_patched.img --loader=prog_emmc_firehose_8916.mbn
 
 **Stage 2 — UART.** Solder fine wire to the UART pads, capture the boot log at 1.8 V/115200. **Decision gate:** the log tells you secure-boot state and whether fastboot/EDL are reachable. This single step de-risks everything after it.
 
-**Stage 3 — establish the unbrickable path.** Enter EDL, load the 8916 firehose, and take a **complete eMMC backup** before any write. **Do not skip this.** Benchmark to proceed: a verified full backup exists on your PC.
+**Stage 3 — establish a verified recovery path.** Enter EDL, load a programmer accepted by the Mirror's OEM root, and take a **complete eMMC backup** before any write. The tested public `cc3153...` loader is not accepted. Benchmark to proceed: Firehose starts and a verified full backup exists on your PC.
 
 **Stage 4 — get root on stock Android** (the recommended end state): props patch or Magisk-patched boot.img, reflashed via EDL/fastboot. Then sideload Fully Kiosk Browser + MagicMirror². This preserves the LVDS display driver.
 
 **Stage 5 — only if you want the challenge:** attempt a custom OS (postmarketOS/mainline) with a hand-built device tree for the DSI-LVDS bridge and panel.
 
 **Thresholds that change the plan:**
-- If `fastboot getvar secure` = `yes` / unique PK_HASH / `Auth_Enabled: True` → secure boot is enforced; **abandon custom-bootloader plans**, pursue only debuggable-build root or shell, and rely on the HDMI/LVDS fallback for display if root fails.
-- If ADB is fully removed AND UART gives no writable console AND fastboot commands are stripped → EDL is your only foothold; a props/Magisk reflash via EDL is still viable.
+- If `fastboot getvar secure` = `yes` / unique PK_HASH / `Auth_Enabled: True` → secure boot is enforced; **abandon custom-bootloader plans** and do not assume EDL storage access without a matching OEM-signed programmer.
+- If ADB cannot be authorized, UART gives no writable console, fastboot commands are stripped, and no matching Firehose is found → replace the Android controller with the documented HDMI/LVDS solution.
 - If the eMMC or MCP is physically dead → HDMI/LVDS controller-board fallback (below).
 
 **Fallback (guaranteed to work):** ignore the SoC entirely and drive the panel with a generic controller board. The olm3ca/mirror project documents this for both the BOE-panel Rev08 units and, via Issue #8, the older **LTI400HN01 / LM40SAMFHD700AG25WV** panel using a generic HDMI/DP/VGA LVDS controller board (about $23.55–$24 on eBay/AliExpress) plus a matching LVDS cable, feeding it from a Raspberry Pi or mini PC running MagicMirror. One eBay buyer of that exact board wrote, "I bought this to repurpose my Lulu Lemmon 'Mirror.'" This is the proven community outcome and your insurance policy. Note the strategic downside: it leaves the SoC unused and requires an external Pi/PC, whereas rooting the stock board would run MagicMirror on the device itself and keep the original display driver.
@@ -182,20 +184,20 @@ edl w boot magisk_patched.img --loader=prog_emmc_firehose_8916.mbn
 
 ## Risks & realistic expectations
 
-**Likelihood by tier (my assessment, given how open this hardware is):**
-- Shell access via UART or ADB: **high** — Qualcomm always has a debug UART, and these Mirrors have shown ADB gadgets.
-- Full EDL eMMC dump: **very high** — 8916 firehose is public; 9008 is a ROM feature that can't be locked out.
-- Root on stock Android (props/Magisk reflash): **high, conditional** on secure boot being off (likely) OR the build being debuggable.
-- Custom bootloader / custom OS with working display: **low-to-moderate** — feasible if unfused, but the panel device-tree work is substantial.
-- Bricking permanently: **low** — as long as EDL/9008 works and you took a full backup, you can always restore. EDL is the "unbrickable" recovery path on Qualcomm.
+**Likelihood by tier (updated from the tested unit):**
+- Shell access via UART or ADB: **unknown** — the UART pads and ADB daemon exist, but ADB is unauthorized and a boot log does not guarantee an interactive UART console.
+- Full EDL eMMC dump: **blocked on the tested unit** until a programmer signed for the `35ac...` OEM root is found.
+- Root on stock Android: **uncertain** — it now depends on UART/stock-software access or obtaining the matching signed programmer.
+- Custom bootloader / custom OS with working display: **low** on this unit because of the OEM secure-boot root, before even accounting for the panel device-tree work.
+- Bricking permanently: **material until recovery is proven** — EDL enumeration alone is not a recovery path when the available programmer is rejected.
 
 **Effort/time:** recon + UART + EDL backup: a focused weekend. Rooting stock + kiosk app: another day or two. Custom OS with display: weeks.
 
 **Honest uncertainty flags:**
 - I could not find *anyone* who has rooted this specific APQ8016E Model One board — the two teardowns stopped at "too hard, use a TV board," and the detailed XDA rooting thread is a *different, newer i.MX8* Mirror. Treat all SoC-specific steps as first-principles extrapolation from DragonBoard 410c / general MSM8916 practice.
-- Whether *your* unit's secure-boot fuses are blown is unknown until you check (`fastboot getvar secure` or EDL PK_HASH). Curiouser was a small startup building signage-like hardware; unfused is plausible but not guaranteed.
-- The exact UART/EDL pad locations are undocumented for this board — you'll have to find them by probing.
+- The observed unique EDL key hash and public-loader rejection strongly indicate secure boot is enforced; a successful matching Firehose or fastboot query would refine that conclusion.
+- The reference-board UART pads are labeled `GND TX RX` at TP25/TP26, but their electrical level should still be measured before attaching an adapter.
 - Which DSI-LVDS bridge chip is on the board is unconfirmed (TC358775 vs SN65DSI8x) — it matters only if you go the custom-OS route.
 - Context: Lululemon acquired Mirror (Curiouser Products) for $500M in 2020, took a $442.7M impairment in Q4 2022, and in September 2023 announced it would discontinue the hardware and hand content to Peloton, continuing service only for existing subscribers. New-account creation is closed, which is exactly why the stock software is now a dead end and repurposing is the only path.
 
-**Bottom line:** get root on the stock ROM via EDL + Magisk/props, keep the stock display driver, and run a kiosk browser. It's the shortest path to a working AI smart mirror and it sidesteps the one genuinely hard problem (the LVDS panel). Keep the ~$24 controller-board plan as your guaranteed fallback.
+**Bottom line:** capture the labeled 1.8 V UART first. Keep the stock display stack if it yields a console or exposes a bootloader route; otherwise hunt specifically for a `35ac...`-signed Mirror programmer. Do not write anything until a full backup and recovery path exist. The generic HDMI/LVDS controller remains the proven fallback.

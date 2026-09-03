@@ -83,9 +83,19 @@ USB behavior observed on the tested APQ8016/MSM8916-family board:
   `unauthorized`, and the kiosk UI does not display Android's RSA dialog.
 - Early/cold boot: Qualcomm EDL `05c6:9008`.
 - Sahara HWID: `0x007060e100000000`.
-- The reported public-key hash is not Qualcomm's common unfused development
-  hash. A matching signed Firehose programmer has not yet been found, so no
-  EDL reads or writes should be attempted with a guessed loader.
+- Sahara serial: `0x258cecb8`.
+- OEM public-key hash:
+  `35ac01e7ee8478261aea5134e07e45cb6c5621d42716c15bb10dee0c53d65759`.
+- A cold start with USB attached and both PCB volume switches held produced a
+  complete Sahara identification exchange. The ROM then requested the ELF
+  header, program headers, and hash table from bkerler's public
+  `007060e100000000_cc3153a802939b90_fhprg_peek.bin`, but stopped responding
+  before executing it. Android subsequently booted normally.
+- The device hash does not match that programmer's `cc3153...` signing root.
+  This behavior is consistent with secure-boot authentication rejecting the
+  loader. Firehose was never entered and no partition I/O occurred. A loader
+  signed for the Mirror's `35ac...` root is required before EDL can be used for
+  backups or recovery.
 
 Board-button observations on the tested unit:
 
@@ -96,6 +106,8 @@ Board-button observations on the tested unit:
 - Booting while holding PCB `VOL+` briefly displayed `Update complete!`, then
   returned to normal OS 1.27.0 automatically. No recovery USB transport was
   exposed and the installed OS version did not change.
+- Holding both PCB volume switches during a USB-connected cold start can expose
+  EDL briefly even though the display later proceeds to the normal boot logo.
 
 ## Safety
 

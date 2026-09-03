@@ -1,0 +1,18 @@
+.DS_Store
+
+# Local reconnaissance output (may contain SSIDs, MAC addresses, or IPs)
+mirror-network-scan.txt
+mirror-api-probe.txt
+*.pcap
+*.pcapng
+
+# Reverse-engineering inputs and generated output
+*.apk
+*.dex
+jadx-output/
+decompiled/
+
+# Local secrets and controller state
+.env
+*.key
+*.pem

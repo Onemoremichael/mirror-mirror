@@ -67,6 +67,31 @@ MIRROR_HOST=192.168.0.51 node mirror-control.mjs features
 `packages` is retained as a protocol probe, but OS 1.27.0 did not answer that
 request on the tested unit.
 
+## Read-only UART capture
+
+Use a USB-UART adapter whose **logic level**, not just its VCC output, is set to
+1.8 V. With the MIRROR unplugged, initially connect only:
+
+- Adapter `GND` to MIRROR `GND`.
+- Adapter `RXD` to MIRROR `TX` (TP25).
+
+Leave adapter `TXD` and `VCC` disconnected. Plug the adapter into the Mac and
+confirm its device path:
+
+```sh
+python3 mirror-uart-capture.py --list
+```
+
+Start a raw 115200 8N1 capture, then cold-boot the MIRROR:
+
+```sh
+python3 mirror-uart-capture.py
+```
+
+The script opens the adapter read-only, never transmits, and saves the raw boot
+log under the ignored `captures/` directory. Press Control-C after the MIRROR
+finishes booting.
+
 ## Hardware findings
 
 The reference board in the FCC internal photographs for FCC ID

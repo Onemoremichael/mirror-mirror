@@ -5,12 +5,15 @@ mirror-network-scan.txt
 mirror-api-probe.txt
 *.pcap
 *.pcapng
+captures/
 
 # Reverse-engineering inputs and generated output
 *.apk
 *.dex
 jadx-output/
 decompiled/
+__pycache__/
+*.pyc
 
 # Local secrets and controller state
 .env

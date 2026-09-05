@@ -1,0 +1,19 @@
+--- sensor_lib.h
++++ sensor_lib.h
+@@ -178,7 +178,6 @@ struct sensor_lib_out_info_t {
+   float    min_fps;
+   float    max_fps;
+   uint32_t mode;
+-  uint32_t is_pdaf_supported;
+ };
+ 
+ struct sensor_lib_out_info_array {
+@@ -411,8 +411,5 @@ typedef struct {
+   /* sensor output settings */
+   sensor_output_t *sensor_output;
+ 
+-  /* sensor parse rdi stats */
+-  struct sensor_parse_RDI_stats *parse_RDI_stats;
+-
+   /* sensor output register address */
+   struct msm_sensor_output_reg_addr_t *output_reg_addr;

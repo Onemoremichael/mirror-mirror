@@ -12,7 +12,7 @@ recovery, and board-specific partitions. The recovered system has:
 - a normal Launcher3 home screen and full 5.1 GiB userdata filesystem;
 - automatic Wi-Fi reconnection with working Internet and DNS;
 - authorized USB ADB from the owner's Mac;
-- a private Mac/iPhone web remote with live video, tap, swipe, text, Android
+- a local Mac/iPhone web remote with live video, tap, swipe, text, Android
   navigation, a directional pad, volume, wake/sleep, and app shortcuts;
 - working speakers, microphone, and Bluetooth;
 - an optional local dashboard app that is not forced as the Android home app.
@@ -20,13 +20,12 @@ recovery, and board-specific partitions. The recovered system has:
 The panel is output-only—it has no touch layer. Keep the Mac connected to the
 MIRROR's internal USB data port for the dependable control bridge. Direct ADB
 over Wi-Fi remains unauthorized on this Android 6 daemon, so the web remote
-uses the Mac's authorized USB link and is intentionally protected by a private
-access key.
+uses the Mac's authorized USB link.
 
-The OV5640 camera is detected by the preserved kernel but preview is not yet
-operational. The reconstructed camera stack reaches the sensor module and then
-crashes in `port_sensor_create`; this is now narrowed to a legacy Qualcomm
-userspace ABI mismatch rather than a missing camera or antenna. See
+The OV5640 camera is detected and opens without crashing, and its supported
+modes and two-lane CSI routing are configured. Preview is not yet operational:
+the legacy Qualcomm ISP does not accept the sensor's YUYV stream as its primary
+format, so applications receive no frames. See
 [RECOVERY-STATUS.md](RECOVERY-STATUS.md) for exact evidence.
 
 ## Use the remote
@@ -42,10 +41,13 @@ Then open:
 - Mac: `http://127.0.0.1:8765`
 - iPhone on the same Wi-Fi: `http://192.168.0.29:8765`
 
-The installer prints the current iPhone address. The private access key lives
-only at `~/Library/Application Support/Mirror Remote/.remote-control-token`.
-Enter it once on each browser; it is retained in that browser. The service
-starts at Mac login and keeps the Mac awake while it is connected to power.
+The installer prints the current iPhone address. The remote opens directly on
+a trusted home network with no login prompt. The service starts at Mac login
+and keeps the Mac awake while it is connected to power.
+
+The dashboard's own control site is separate: scan the QR shown on the MIRROR
+and enter the short four-digit PIN displayed directly beneath it. That pairing
+is retained by the phone browser and can be revoked from the dashboard.
 
 Full instructions and troubleshooting are in
 [REMOTE-CONTROL.md](REMOTE-CONTROL.md).
@@ -74,7 +76,7 @@ The final sparse image is ignored by Git at
 running on the tested unit has SHA-256:
 
 ```text
-ea407a2d5a6ca8f15438c4f0d4f0a1d39a406935ed5f21cc9d8e4f20129e69c6
+2e8f2082ac9f416b490630f5f1052d3b48aa297ea3867d79bdc5ce5fe0bb80e4
 ```
 
 `patches/android-m-mirror-revival.patch` records the owner-key, userdata,
@@ -88,7 +90,9 @@ The optional dashboard is pinned to a known upstream revision and built with:
 ./mirror-build-dashboard.sh
 ```
 
-It is installed as a regular launchable app, not as the system launcher.
+It is installed as a regular launchable app, not as the system launcher. The
+landscape patch also reduces its local-device pairing code to four digits and
+keeps the code visible beneath the QR on the 1920×1080 panel.
 
 ## Retired-app network tools
 

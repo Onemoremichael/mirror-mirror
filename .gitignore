@@ -18,8 +18,7 @@ decompiled/
 __pycache__/
 *.pyc
 
-# Local secrets and controller state
+# Local secrets
 .env
 *.key
 *.pem
-remote-control/.remote-control-token

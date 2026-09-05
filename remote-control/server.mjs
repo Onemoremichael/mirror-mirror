@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile, spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,14 +13,8 @@ const host = process.env.MIRROR_REMOTE_HOST || '0.0.0.0';
 const port = Number(process.env.MIRROR_REMOTE_PORT || 8765);
 const adb = process.env.ADB_PATH || '/opt/homebrew/bin/adb';
 const scrcpy = process.env.SCRCPY_PATH || '/opt/homebrew/bin/scrcpy';
-const tokenFile = process.env.MIRROR_REMOTE_TOKEN_FILE || join(root, '.remote-control-token');
 let knownMirrorHost = process.env.MIRROR_HOST || '';
 let lastNetworkConnectAttempt = 0;
-
-if (!existsSync(tokenFile)) {
-  writeFileSync(tokenFile, randomBytes(8).toString('hex') + '\n', { mode: 0o600 });
-}
-const accessToken = readFileSync(tokenFile, 'utf8').trim();
 
 // Keep the Mac reachable while it is on external power. The assertion ends
 // automatically if this service stops, and does not block display sleep.
@@ -156,10 +149,6 @@ async function status() {
   return { connected: true, serial, booted: booted === '1', wifiDriver, route, display };
 }
 
-function requireToken(request) {
-  return request.headers['x-mirror-token'] === accessToken;
-}
-
 const server = createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
   try {
@@ -175,8 +164,8 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (!url.pathname.startsWith('/api/') || !requireToken(request)) {
-      json(response, 401, { error: 'Enter the Mirror remote access key' });
+    if (!url.pathname.startsWith('/api/')) {
+      json(response, 404, { error: 'Control not found' });
       return;
     }
 
@@ -269,5 +258,4 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, host, () => {
   console.log(`Mirror Remote is available at http://127.0.0.1:${port}`);
-  console.log(`Access key: ${accessToken}`);
 });

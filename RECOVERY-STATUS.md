@@ -17,7 +17,7 @@ Verified after the final reboot:
 | USB control | ADB authorized as serial `be9d0af` |
 | Wi-Fi | `SETUP-A040`, `192.168.0.51`, driver status `ok` |
 | Phone/Mac remote | Live screen and controls through Mac service on port 8765 |
-| Dashboard | `dev.mirror.repurpose` 1.8.2; local API on port 8787 |
+| Dashboard | `dev.mirror.repurpose` 1.8.2; four-digit pairing; local API on port 8787 |
 | Bluetooth | Enabled; Android profiles loaded |
 | Audio | Speaker playback and built-in microphone recording verified |
 | Camera | Kernel detects OV5640; Android preview not operational |
@@ -25,7 +25,7 @@ Verified after the final reboot:
 The final sparse system image has SHA-256:
 
 ```text
-ea407a2d5a6ca8f15438c4f0d4f0a1d39a406935ed5f21cc9d8e4f20129e69c6
+2e8f2082ac9f416b490630f5f1052d3b48aa297ea3867d79bdc5ce5fe0bb80e4
 ```
 
 ## Durable control
@@ -33,14 +33,14 @@ ea407a2d5a6ca8f15438c4f0d4f0a1d39a406935ed5f21cc9d8e4f20129e69c6
 The display has no touch layer. The dependable path is:
 
 ```text
-iPhone or Mac browser → private web remote on Mac → authorized USB ADB → MIRROR
+iPhone or Mac browser → local web remote on Mac → authorized USB ADB → MIRROR
 ```
 
-The Mac service starts at login, binds port 8765, requires a generated private
-access key, and keeps the Mac awake while on external power. It offers live
-screen updates, tap/swipe/text input, Back/Home/Recent, D-pad/OK, volume,
-wake/sleep, Settings, dashboard, and native `scrcpy` launch. Wake also dismisses
-the credential-free keyguard.
+The Mac service starts at login, binds port 8765 on the trusted local network,
+and keeps the Mac awake while on external power. It opens without an account or
+access-key prompt and offers live screen updates, tap/swipe/text input,
+Back/Home/Recent, D-pad/OK, volume, wake/sleep, Settings, dashboard, and native
+`scrcpy` launch. Wake also dismisses the credential-free keyguard.
 
 Direct TCP ADB reaches `192.168.0.51:5555`, and the framework recognizes the
 owner's key, but this old daemon leaves the TCP transport unauthorized while
@@ -86,32 +86,32 @@ this custom sparse image caused the later chunk to be rejected.
 
 ## Camera boundary
 
-Camera work progressed through three distinct failures:
+The camera now advances substantially beyond the original crash:
 
-1. The stock kernel registers `ov5640` successfully.
-2. A pinned OV5640 sensor library was built and installed with SHA-256
-   `71e6dbe713bc3314c76da69d2107558bcba2f25dd17401c780cafe2748278a68`.
-3. Ten Qualcomm media-controller modules omitted by the userdebug product
-   recipe were restored. Missing fixed-focus hybrid-AF symbols were supplied by
-   the narrow compatibility library in `camera/legacy-camera-compat.c`.
+1. The stock kernel registers the `ov5640` sensor.
+2. Ten Qualcomm media-controller modules omitted by the userdebug product
+   recipe are restored, with the narrow fixed-focus compatibility symbols from
+   `camera/legacy-camera-compat.c`.
+3. The HY22 sensor-library ABI mismatch is corrected. The daemon stays alive,
+   Android reports one camera, and applications open it successfully.
+4. The library exposes the three modes the kernel actually implements and uses
+   the board's explicit two-lane CSI route: lane assignment `0x4320`, mask `7`,
+   CSID core/PHY `1`.
 
-The camera daemon now links and begins sensor initialization, but exits with
-SIGSEGV in the vendor sensor module:
+The installed OV5640 library has SHA-256:
 
 ```text
-libmmcamera2_sensor_modules.so: port_sensor_create+443
-liboemcamera.so: mct_list_traverse+26
-libmmcamera2_sensor_modules.so: module_sensor_init+264
+c268c69d8efa15f603f936c9a5aa987ad4d551bd9eef6472152a8dc4b49d951f
 ```
 
-Disassembly identifies the faulting load as access to
-`sensor_stream_info_array->sensor_stream_info[j].vc_cfg_size`. The pointer
-returned by the OV5640 sensor library does not match the prebuilt sensor
-module's expected layout. That is strong evidence of an ABI mismatch between
-the available legacy Qualcomm source and binary set. Camera preview is not
-claimed as working; the next defensible attempt is to build the sensor media
-controller from the same source family as the OV5640 library, not to replace
-more partitions.
+Preview is still not claimed as working. The remaining failure is downstream
+of sensor discovery and configuration: the legacy Qualcomm ISP reports that it
+cannot find a primary format for the OV5640 YUYV stream, stream-on does not
+propagate through ISP/CPP/C2D, and applications receive zero frames. There are
+no sensor-resolution or CSI-configuration errors in the latest run. This is a
+focused vendor ISP-format integration boundary, not a missing camera, broken
+sensor, or daemon crash. See [CAMERA-RECOVERY.md](CAMERA-RECOVERY.md) for the
+reproducible build and evidence.
 
 ## Flash history and boundaries
 

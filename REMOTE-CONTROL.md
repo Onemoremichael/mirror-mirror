@@ -1,6 +1,6 @@
 # Mirror Remote
 
-The MIRROR panel is not a touchscreen. This private local service turns a Mac
+The MIRROR panel is not a touchscreen. This local service turns a Mac
 connected by USB into a control bridge for Safari on the same Mac or an iPhone
 on the same Wi-Fi.
 
@@ -22,13 +22,13 @@ keep the computer awake while it is on external power.
 - On an iPhone: use the LAN address printed by the installer, currently
   `http://192.168.0.29:8765`
 
-Both devices must be on the same Wi-Fi. The access key is stored at:
+Both devices must be on the same Wi-Fi. The remote opens directly with no
+account or access-key prompt. It is meant for a trusted home network and is not
+exposed to the Internet.
 
-```text
-~/Library/Application Support/Mirror Remote/.remote-control-token
-```
-
-Enter the key once. Safari retains it locally. Do not publish or commit it.
+This Mac relay is distinct from the dashboard site hosted by the MIRROR on
+port 8787. The relay needs no code. The dashboard site uses the four-digit PIN
+shown under its QR and remembers paired phone browsers.
 
 ## Controls
 
@@ -68,6 +68,6 @@ Reinstall/restart the controller after changing its source:
 Logs are stored at `~/Library/Logs/mirror-remote.log` and
 `~/Library/Logs/mirror-remote-error.log`.
 
-This bridge is intentionally local and access-key protected. Direct Android
-ADB over Wi-Fi is not the dependable path on this Android 6 build; the Mac's
-authorized USB connection is.
+This bridge is intentionally local. Direct Android ADB over Wi-Fi is not the
+dependable path on this Android 6 build; the Mac's authorized USB connection
+is.

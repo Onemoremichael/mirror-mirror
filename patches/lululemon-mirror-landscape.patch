@@ -15,3 +15,99 @@ index cc8b2ae..fc32dc0 100644
                  <category android:name="android.intent.category.LAUNCHER" />
              </intent-filter>
          </activity>
+diff --git a/android/mirror-home/src/main/assets/control/dashboard/mirror.js b/android/mirror-home/src/main/assets/control/dashboard/mirror.js
+--- a/android/mirror-home/src/main/assets/control/dashboard/mirror.js
++++ b/android/mirror-home/src/main/assets/control/dashboard/mirror.js
+@@ -356,9 +356,9 @@
+           value = motionValue(automation);
+           return metric('Presence', escapeHtml(value.text), value.quiet);
+         case 'pairing':
+-          value = runtime && runtime.pairingCode ? String(runtime.pairingCode) : (editing ? '482913' : '');
++          value = runtime && runtime.pairingCode ? String(runtime.pairingCode) : (editing ? '4829' : '');
+           return metric('Pair with code', value
+-            ? '<span class="mr-code">' + escapeHtml(value.slice(0, 3) + ' ' + value.slice(3)) + '</span>'
++            ? '<span class="mr-code">' + escapeHtml(value.slice(0, 2) + ' ' + value.slice(2)) + '</span>'
+             : '\u2014', !value);
+         case 'photo': return photoMarkup(widget);
+         default: return '';
+diff --git a/android/mirror-home/src/main/assets/control/index.html b/android/mirror-home/src/main/assets/control/index.html
+--- a/android/mirror-home/src/main/assets/control/index.html
++++ b/android/mirror-home/src/main/assets/control/index.html
+@@ -36,11 +36,11 @@
+     <div class="pairing-inner">
+       <div class="pairing-mark" aria-hidden="true"></div>
+       <h1 id="pairing-title">Pair with <span id="pairing-mirror-name">your Mirror</span></h1>
+-      <p class="lede">Enter the six-digit code on the mirror. This browser gets its own key, which you can revoke any time.</p>
++      <p class="lede">Enter the four-digit code on the mirror. This browser gets its own key, which you can revoke any time.</p>
+       <form id="pair-form" class="pairing-form">
+         <label class="code-field">
+           <span class="visually-hidden">Pairing code</span>
+-          <input id="pair-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" required>
++          <input id="pair-code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="one-time-code" placeholder="0000" required>
+         </label>
+         <label class="field">
+           <span>Name this device</span>
+diff --git a/android/mirror-home/src/main/java/dev/mirror/repurpose/MainActivity.java b/android/mirror-home/src/main/java/dev/mirror/repurpose/MainActivity.java
+--- a/android/mirror-home/src/main/java/dev/mirror/repurpose/MainActivity.java
++++ b/android/mirror-home/src/main/java/dev/mirror/repurpose/MainActivity.java
+@@ -294,12 +294,12 @@
+                 && !setup.passphrase.isEmpty();
+         if (!address.isEmpty()) {
+             String controlUrl = "http://" + address + ":" + ControlServerService.PORT + "/";
+-            middle.addView(createQrCard(controlUrl, 252, "Scan to open Mirror controls"));
++            middle.addView(createQrCard(controlUrl, 190, "Scan to open Mirror controls"));
+             middle.addView(caption(
+                     pairingManager.isPaired()
+                             ? "Scan to open the controls"
+                             : "Scan with your phone to set up",
+-                    dp(26)));
++                    dp(12)));
+             addPairingCode(middle);
+         } else if (setupNetwork) {
+             LinearLayout codes = new LinearLayout(this);
+@@ -356,21 +356,21 @@
+         LinearLayout.LayoutParams labelLayout = new LinearLayout.LayoutParams(
+                 ViewGroup.LayoutParams.WRAP_CONTENT,
+                 ViewGroup.LayoutParams.WRAP_CONTENT);
+-        labelLayout.topMargin = dp(44);
++        labelLayout.topMargin = dp(18);
+         parent.addView(label, labelLayout);
+ 
+         TextView code = new TextView(this);
+         code.setText(groupedPairingCode());
+         code.setTypeface(Typeface.create("sans-serif-light", Typeface.NORMAL));
+         code.setTextColor(TEXT_COLOR);
+-        code.setTextSize(TypedValue.COMPLEX_UNIT_SP, 64);
++        code.setTextSize(TypedValue.COMPLEX_UNIT_SP, 42);
+         code.setLetterSpacing(0.14f);
+         code.setGravity(Gravity.CENTER);
+         code.setIncludeFontPadding(false);
+         LinearLayout.LayoutParams codeLayout = new LinearLayout.LayoutParams(
+                 ViewGroup.LayoutParams.WRAP_CONTENT,
+                 ViewGroup.LayoutParams.WRAP_CONTENT);
+-        codeLayout.topMargin = dp(8);
++        codeLayout.topMargin = dp(2);
+         parent.addView(code, codeLayout);
+         nativeCode = code;
+     }
+@@ -377,7 +377,7 @@
+ 
+     private String groupedPairingCode() {
+         String value = pairingManager.currentCode();
+-        return value.length() == 6 ? value.substring(0, 3) + " " + value.substring(3) : value;
++        return value.length() == 4 ? value.substring(0, 2) + " " + value.substring(2) : value;
+     }
+ 
+     private View setupStep(String number, String title, String payload) {
+diff --git a/android/mirror-home/src/main/java/dev/mirror/repurpose/PairingManager.java b/android/mirror-home/src/main/java/dev/mirror/repurpose/PairingManager.java
+--- a/android/mirror-home/src/main/java/dev/mirror/repurpose/PairingManager.java
++++ b/android/mirror-home/src/main/java/dev/mirror/repurpose/PairingManager.java
+@@ -65,7 +65,7 @@
+     public synchronized String currentCode() {
+         long now = System.currentTimeMillis();
+         if (code == null || now >= codeExpiresAt) {
+-            code = String.format(Locale.US, "%06d", random.nextInt(1_000_000));
++            code = String.format(Locale.US, "%04d", random.nextInt(10_000));
+             codeExpiresAt = now + CODE_LIFETIME_MS;
+             failures = 0;
+             lockedUntil = 0;

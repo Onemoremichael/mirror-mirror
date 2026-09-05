@@ -1,149 +1,147 @@
 # mirror-mirror
 
-Tools and field notes for recovering local control of the discontinued
-lululemon Studio MIRROR Model One without the retired mobile app.
+Tools, build notes, and a phone-friendly remote for giving a discontinued
+lululemon Studio MIRROR Model One a useful second life.
 
-## What works
+## Current result
 
-- Pairing with the MIRROR over its `mirror-*` setup Wi-Fi.
-- Scanning for nearby Wi-Fi networks.
-- Provisioning a WPA/WPA2 network without storing or printing its password.
-- Reading status and using the paired protobuf WebSocket on the local network.
+The tested unit now boots a reconstructed Android 6.0.1 desktop in 1920×1080
+landscape while retaining its original signed bootloader, boot image, kernel,
+recovery, and board-specific partitions. The recovered system has:
 
-The tested unit runs MIRROR OS 1.27.0 and exposes an HTTP status service on
-port 8080 and a protobuf WebSocket at `/socket` on port 7000.
+- a normal Launcher3 home screen and full 5.1 GiB userdata filesystem;
+- automatic Wi-Fi reconnection with working Internet and DNS;
+- authorized USB ADB from the owner's Mac;
+- a private Mac/iPhone web remote with live video, tap, swipe, text, Android
+  navigation, a directional pad, volume, wake/sleep, and app shortcuts;
+- working speakers, microphone, and Bluetooth;
+- an optional local dashboard app that is not forced as the Android home app.
 
-## Requirements
+The panel is output-only—it has no touch layer. Keep the Mac connected to the
+MIRROR's internal USB data port for the dependable control bridge. Direct ADB
+over Wi-Fi remains unauthorized on this Android 6 daemon, so the web remote
+uses the Mac's authorized USB link and is intentionally protected by a private
+access key.
 
-- macOS (the scripts themselves should also work on current Linux)
-- Node.js 22 or newer
-- A data-capable USB cable for Android/EDL reconnaissance
-- Android platform tools for `adb` and `fastboot`
+The OV5640 camera is detected by the preserved kernel but preview is not yet
+operational. The reconstructed camera stack reaches the sensor module and then
+crashes in `port_sensor_create`; this is now narrowed to a legacy Qualcomm
+userspace ABI mismatch rather than a missing camera or antenna. See
+[RECOVERY-STATUS.md](RECOVERY-STATUS.md) for exact evidence.
 
-On macOS:
+## Use the remote
+
+Install the Mac service once:
 
 ```sh
-brew install node android-platform-tools
+./install-mirror-remote.sh
 ```
 
-## Restore Wi-Fi setup
+Then open:
 
-Connect the Mac to the MIRROR's `mirror-*` access point, then scan:
+- Mac: `http://127.0.0.1:8765`
+- iPhone on the same Wi-Fi: `http://192.168.0.29:8765`
+
+The installer prints the current iPhone address. The private access key lives
+only at `~/Library/Application Support/Mirror Remote/.remote-control-token`.
+Enter it once on each browser; it is retained in that browser. The service
+starts at Mac login and keeps the Mac awake while it is connected to power.
+
+Full instructions and troubleshooting are in
+[REMOTE-CONTROL.md](REMOTE-CONTROL.md).
+
+For a native Mac window, the remote's **Mac view** button launches `scrcpy`, or
+run:
+
+```sh
+scrcpy -s be9d0af --window-title "Mirror Control" --stay-awake --no-audio
+```
+
+## Rebuild components
+
+The working image is assembled in layers so the preserved stock kernel and
+board drivers remain in place:
+
+```sh
+./mirror-build-running-kernel-wifi.sh
+./mirror-build-ov5640-camera.sh
+./mirror-build-camera-compat.sh
+./mirror-build-final-system.sh
+```
+
+The final sparse image is ignored by Git at
+`artifacts/android-m-msm8916_64/system-mirror-final.img`. The image currently
+running on the tested unit has SHA-256:
+
+```text
+ea407a2d5a6ca8f15438c4f0d4f0a1d39a406935ed5f21cc9d8e4f20129e69c6
+```
+
+`patches/android-m-mirror-revival.patch` records the owner-key, userdata,
+audio, Wi-Fi retry, and product-property source changes. Build artifacts,
+captures, credentials, and local source trees are deliberately excluded from
+Git.
+
+The optional dashboard is pinned to a known upstream revision and built with:
+
+```sh
+./mirror-build-dashboard.sh
+```
+
+It is installed as a regular launchable app, not as the system launcher.
+
+## Retired-app network tools
+
+The repository also preserves a local replacement for the dead setup flow.
+Connect the Mac to the MIRROR's `mirror-*` setup network, then use:
 
 ```sh
 node mirror-wifi-scan.mjs scan
-```
-
-To provision a network:
-
-```sh
 node mirror-wifi-scan.mjs connect
 ```
 
-The script prompts locally for the SSID and hides the password. Credentials
-are sent directly to the MIRROR and are never written to disk.
-
-## Local-network control
-
-Set the MIRROR's LAN address and read its status:
+The connect flow prompts locally and never writes or prints the Wi-Fi
+password. For the original OS local protocol:
 
 ```sh
 MIRROR_HOST=192.168.0.51 node mirror-control.mjs status
-```
-
-The `dashboard` command asks the stock UI to return to its dashboard:
-
-```sh
+MIRROR_HOST=192.168.0.51 node mirror-control.mjs features
 MIRROR_HOST=192.168.0.51 node mirror-control.mjs dashboard
 ```
 
-The read-only `features` command reports the capabilities advertised by the
-installed firmware:
+## Hardware notes
 
-```sh
-MIRROR_HOST=192.168.0.51 node mirror-control.mjs features
-```
+- Board: `MIR63A0-00-P1 / PCA#500240 RevP21`, APQ8016/MSM8916 family.
+- USB normal boot: Qualcomm Android `05c6:9039`.
+- Fastboot: cold power-on while holding PCB `VOL-`; a blank screen is normal.
+- Recovery/update UI: cold power-on while holding PCB `VOL+`.
+- UART header: `GND`, `TX`, `RX` at the board's three-pin header. Treat it as
+  1.8 V logic and never connect the USB-UART adapter's VCC lead.
+- This board has no microSD slot.
+- The Wi-Fi antenna is a Molex 2.4/5 GHz dual-band antenna, marked `146153`.
 
-`packages` is retained as a protocol probe, but OS 1.27.0 did not answer that
-request on the tested unit.
-
-## Read-only UART capture
-
-Use a USB-UART adapter whose **logic level**, not just its VCC output, is set to
-1.8 V. With the MIRROR unplugged, initially connect only:
-
-- Adapter `GND` to MIRROR `GND`.
-- Adapter `RXD` to MIRROR `TX` (TP25).
-
-Leave adapter `TXD` and `VCC` disconnected. Plug the adapter into the Mac and
-confirm its device path:
+The read-only UART helper is safe for initial observation:
 
 ```sh
 python3 mirror-uart-capture.py --list
-```
-
-Start a raw 115200 8N1 capture, then cold-boot the MIRROR:
-
-```sh
 python3 mirror-uart-capture.py
 ```
 
-The script opens the adapter read-only, never transmits, and saves the raw boot
-log under the ignored `captures/` directory. Press Control-C after the MIRROR
-finishes booting.
+Connect adapter `GND` to board `GND` and adapter `RXD` to board `TX`; leave
+adapter `TXD` and `VCC` disconnected for a read-only capture.
 
-## Hardware findings
+## Important recovery constraints
 
-The reference board in the FCC internal photographs for FCC ID
-`2AOSD-RLSYM1R0` shows three tactile switches labeled `PWR`, `VOL+`, and
-`VOL-`. They are tiny PCB-mounted switches rather than external controls, and
-may be hidden by the installed frame; confirm the board revision before relying
-on their presence. The photographed board's reverse side also exposes three
-test pads labeled `GND TX RX` (TP25/TP26). Treat the UART as 1.8 V logic until
-measured otherwise.
-
-USB behavior observed on the tested APQ8016/MSM8916-family board:
-
-- Normal boot: Qualcomm Android USB `05c6:9039`; ADB is present but reports
-  `unauthorized`, and the kiosk UI does not display Android's RSA dialog.
-- Early/cold boot: Qualcomm EDL `05c6:9008`.
-- Sahara HWID: `0x007060e100000000`.
-- Sahara serial: `0x258cecb8`.
-- OEM public-key hash:
-  `35ac01e7ee8478261aea5134e07e45cb6c5621d42716c15bb10dee0c53d65759`.
-- A cold start with USB attached and both PCB volume switches held produced a
-  complete Sahara identification exchange. The ROM then requested the ELF
-  header, program headers, and hash table from bkerler's public
-  `007060e100000000_cc3153a802939b90_fhprg_peek.bin`, but stopped responding
-  before executing it. Android subsequently booted normally.
-- The device hash does not match that programmer's `cc3153...` signing root.
-  This behavior is consistent with secure-boot authentication rejecting the
-  loader. Firehose was never entered and no partition I/O occurred. A loader
-  signed for the Mirror's `35ac...` root is required before EDL can be used for
-  backups or recovery.
-
-Board-button observations on the tested unit:
-
-- A normal cold start requires the external power switch on followed by a
-  roughly 3–5 second press of the PCB `PWR` switch.
-- Booting while holding PCB `VOL-` leaves the unit in a silent state with no
-  ADB, fastboot, or EDL USB enumeration; a full AC power cycle restores it.
-- Booting while holding PCB `VOL+` briefly displayed `Update complete!`, then
-  returned to normal OS 1.27.0 automatically. No recovery USB transport was
-  exposed and the installed OS version did not change.
-- Holding both PCB volume switches during a USB-connected cold start can expose
-  EDL briefly even though the display later proceeds to the normal boot logo.
-
-## Safety
-
-Current scripts are limited to setup, status, and UI/navigation requests. Do
-not send factory-reset, firmware-install, partition erase, or partition write
-commands without a verified full backup and a recovery path. In particular,
-the updater messages discovered in the retired app do not accept a caller-
-supplied URL or APK; the MIRROR chooses vendor update artifacts itself.
+The modern macOS `fastboot format:ext4 userdata` creates features this Android
+6 build cannot mount. The successful userdata recovery used an
+Android-compatible sparse ext4 image sent whole, without `fastboot -S`.
+Partition writes should always be scoped to the exact verified serial and
+partition. See [RECOVERY-STATUS.md](RECOVERY-STATUS.md) before repeating any
+flash operation.
 
 ## Sources
 
 - [FCC internal photographs](https://fccid.io/2AOSDRLSYM1R0/Internal-Photos/Internal-Photos-3965859)
 - [bkerler/edl](https://github.com/bkerler/edl)
 - [bkerler/Loaders](https://github.com/bkerler/Loaders)
+- [Community dashboard](https://github.com/TimStewartJ/lululemon-mirror-repurpose)

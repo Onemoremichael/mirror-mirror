@@ -6,6 +6,9 @@ mirror-api-probe.txt
 *.pcap
 *.pcapng
 captures/
+.work/
+artifacts/
+tmp/
 
 # Reverse-engineering inputs and generated output
 *.apk
@@ -19,3 +22,4 @@ __pycache__/
 .env
 *.key
 *.pem
+remote-control/.remote-control-token

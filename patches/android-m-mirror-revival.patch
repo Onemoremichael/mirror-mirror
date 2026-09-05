@@ -1,0 +1,192 @@
+diff --git a/frameworks/base/services/usb/java/com/android/server/usb/UsbDebuggingManager.java b/frameworks/base/services/usb/java/com/android/server/usb/UsbDebuggingManager.java
+--- a/frameworks/base/services/usb/java/com/android/server/usb/UsbDebuggingManager.java
++++ b/frameworks/base/services/usb/java/com/android/server/usb/UsbDebuggingManager.java
+@@ -54,6 +54,11 @@ import java.util.Arrays;
+ public class UsbDebuggingManager {
+     private static final String TAG = "UsbDebuggingManager";
+     private static final boolean DEBUG = false;
++    // This build is for the owner's retired Mirror.  Accept only the Mac key
++    // recorded when the image was built; every other host still gets Android's
++    // normal confirmation flow.
++    private static final String MIRROR_OWNER_ADB_FINGERPRINT =
++            "23:5F:BF:FE:B2:98:1F:91:A7:E6:18:C3:AD:98:05:A3";
+ 
+     private final String ADBD_SOCKET = "adbd";
+     private final String ADB_DIRECTORY = "misc/adb";
+@@ -277,6 +282,14 @@ public class UsbDebuggingManager {
+                         break;
+                     }
+                     mFingerprints = fingerprints;
++                    if (MIRROR_OWNER_ADB_FINGERPRINT.equals(fingerprints)) {
++                        Slog.i(TAG, "Authorizing the Mirror owner's ADB key");
++                        writeKey(key);
++                        if (mThread != null) {
++                            mThread.sendResponse("OK");
++                        }
++                        break;
++                    }
+                     startConfirmation(key, mFingerprints);
+                     break;
+                 }
+diff --git a/system/vold/cryptfs.c b/system/vold/cryptfs.c
+--- a/system/vold/cryptfs.c
++++ b/system/vold/cryptfs.c
+@@ -3498,13 +3498,57 @@ error_shutting_down:
+     return -1;
+ }
+ 
++/*
++ * The retired Mirror's signed boot image marks /data forceencrypt, but the
++ * original encryption handoff no longer completes.  Keep its boot chain and
++ * mount the already-created ext4 userdata filesystem directly so Android can
++ * finish booting.  This path is reached only by init's first-boot command:
++ *     vdc --wait cryptfs enablecrypto inplace default noui
++ */
++static int mirror_revival_mount_unencrypted_data(void)
++{
++    char real_blkdev[MAXPATHLEN] = { 0 };
++
++    fs_mgr_get_crypt_info(fstab, 0, real_blkdev, sizeof(real_blkdev));
++    if (real_blkdev[0] == '\0') {
++        SLOGE("Mirror revival: userdata block device was not found\n");
++        return -1;
++    }
++
++    SLOGW("Mirror revival: mounting unencrypted userdata from %s\n",
++          real_blkdev);
++    if (fs_mgr_do_mount(fstab, DATA_MNT_POINT, real_blkdev, 0) != 0) {
++        SLOGE("Mirror revival: failed to mount userdata\n");
++        return -1;
++    }
++
++    property_set("ro.crypto.state", "unencrypted");
++    property_set("vold.decrypt", "trigger_load_persist_props");
++    if (prep_data_fs()) {
++        SLOGE("Mirror revival: post-fs-data failed\n");
++        return -1;
++    }
++
++    /* Reload the owner's key from the now-mounted /data filesystem. */
++    property_set("ctl.restart", "adbd");
++    property_set("vold.decrypt", "trigger_restart_framework");
++    SLOGW("Mirror revival: started Android with unencrypted userdata\n");
++    return 0;
++}
++
+ int cryptfs_enable(char *howarg, int type, char *passwd, int no_ui)
+ {
++    if (!strcmp(howarg, "inplace") && type == CRYPT_TYPE_DEFAULT && no_ui) {
++        return mirror_revival_mount_unencrypted_data();
++    }
+     return cryptfs_enable_internal(howarg, type, passwd, no_ui);
+ }
+ 
+ int cryptfs_enable_default(char *howarg, int no_ui)
+ {
++    if (!strcmp(howarg, "inplace") && no_ui) {
++        return mirror_revival_mount_unencrypted_data();
++    }
+     return cryptfs_enable_internal(howarg, CRYPT_TYPE_DEFAULT,
+                           DEFAULT_PASSWORD, no_ui);
+ }
+diff --git a/device/qcom/msm8916_32/mixer_paths_sbc.xml b/device/qcom/msm8916_32/mixer_paths_sbc.xml
+--- a/device/qcom/msm8916_32/mixer_paths_sbc.xml
++++ b/device/qcom/msm8916_32/mixer_paths_sbc.xml
+@@ -472,8 +472,21 @@
+     </path>
+ 
+     <path name="speaker">
+-        <ctl name="RX3 MIX1 INP1" value="RX1" />
+-        <ctl name="SPK DAC Switch" value="1" />
++        <!--
++            The MIRROR's AUDIO-HDR feeds a separate stereo amplifier rather
++            than the codec's small handset-speaker output. Route the Android
++            speaker device through the line/headphone pair and assert the
++            external-speaker gate used by this Qualcomm board family.
++        -->
++        <ctl name="QUAT_MI2S_RX Audio Mixer MultiMedia1" value="0" />
++        <ctl name="PRI_MI2S_RX Audio Mixer MultiMedia1" value="1" />
++        <ctl name="MI2S_RX Channels" value="Two" />
++        <ctl name="RX1 MIX1 INP1" value="RX1" />
++        <ctl name="RX2 MIX1 INP1" value="RX2" />
++        <ctl name="RDAC2 MUX" value="RX2" />
++        <ctl name="HPHL" value="Switch" />
++        <ctl name="HPHR" value="Switch" />
++        <ctl name="Ext Spk Switch" value="On" />
+     </path>
+ 
+     <path name="hdmi">
+diff --git a/frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiStateMachine.java b/frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiStateMachine.java
+--- a/frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiStateMachine.java
++++ b/frameworks/opt/net/wifi/service/java/com/android/server/wifi/WifiStateMachine.java
+@@ -385,5 +385,16 @@ public class WifiStateMachine extends StateMachine implements WifiNative.WifiRss
+ 
+     private int mSupplicantRestartCount = 0;
+ 
++    /**
++     * The Mirror's WLAN device can appear several seconds after Android's
++     * framework first asks to enable Wi-Fi. Keep the controller in its
++     * enabling state while the device finishes probing instead of reporting a
++     * permanent failure after the first early attempt.
++     */
++    private static final int DRIVER_LOAD_RETRY_INTERVAL_MSECS = 5000;
++    private static final int DRIVER_LOAD_RETRY_TRIES = 12;
++
++    private int mDriverLoadRetryCount = 0;
++
+     /* Tracks sequence number on stop failure message */
+     private int mSupplicantStopFailureToken = 0;
+@@ -5994,5 +6004,6 @@ public class WifiStateMachine extends StateMachine implements WifiNative.WifiRss
+             switch (message.what) {
+                 case CMD_START_SUPPLICANT:
+                     if (mWifiNative.loadDriver()) {
++                        mDriverLoadRetryCount = 0;
+                         try {
+                             mNwService.wifiFirmwareReload(mInterfaceName, "STA");
+@@ -6045,10 +6056,26 @@ public class WifiStateMachine extends StateMachine implements WifiNative.WifiRss
+                             setWifiState(WifiManager.WIFI_STATE_FAILED);
+                         }
+                     } else {
+-                        loge("Failed to load driver");
+-                        setWifiState(WifiManager.WIFI_STATE_FAILED);
++                        if (++mDriverLoadRetryCount <= DRIVER_LOAD_RETRY_TRIES) {
++                            loge("Failed to load driver, retrying in "
++                                    + DRIVER_LOAD_RETRY_INTERVAL_MSECS + " ms ("
++                                    + mDriverLoadRetryCount + "/"
++                                    + DRIVER_LOAD_RETRY_TRIES + ")");
++                            setWifiState(WifiManager.WIFI_STATE_ENABLING);
++                            sendMessageDelayed(CMD_START_SUPPLICANT,
++                                    DRIVER_LOAD_RETRY_INTERVAL_MSECS);
++                        } else {
++                            loge("Failed to load driver after "
++                                    + DRIVER_LOAD_RETRY_TRIES + " retries");
++                            mDriverLoadRetryCount = 0;
++                            setWifiState(WifiManager.WIFI_STATE_FAILED);
++                        }
+                     }
+                     break;
+                 case CMD_STOP_SUPPLICANT:
++                    // Cancel a pending delayed driver-load retry when Wi-Fi is
++                    // deliberately switched off.
++                    removeMessages(CMD_START_SUPPLICANT);
++                    mDriverLoadRetryCount = 0;
+                     setWifiState(WifiManager.WIFI_STATE_DISABLED);
+                     break;
+diff --git a/device/qcom/msm8916_64/system.prop b/device/qcom/msm8916_64/system.prop
+--- a/device/qcom/msm8916_64/system.prop
++++ b/device/qcom/msm8916_64/system.prop
+@@ -129,3 +129,14 @@ persist.sys.usb.config=diag,serial_smd,rmnet_bam,adb
+ 
++# Owner-controlled MIRROR: keep RSA-authenticated ADB available over the LAN
++# so the display can be controlled without an internal USB connection.
++service.adb.tcp.port=5555
++
++# Qualcomm camera diagnostics for the recovered OV5640 sensor path. Defining
++# these in the product property file avoids the SELinux restriction that blocks
++# the generic post-boot shell from setting camera-owned persistent properties.
++persist.camera.hal.debug.mask=7
++persist.camera.mct.debug.mask=1
++persist.camera.sensor.debug=1
++
+ #Set read only default composition for USB
+ ro.sys.usb.default.config=diag,serial_smd,rmnet_bam,adb

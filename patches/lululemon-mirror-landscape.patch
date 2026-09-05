@@ -1,0 +1,17 @@
+diff --git a/android/mirror-home/src/main/AndroidManifest.xml b/android/mirror-home/src/main/AndroidManifest.xml
+index cc8b2ae..fc32dc0 100644
+--- a/android/mirror-home/src/main/AndroidManifest.xml
++++ b/android/mirror-home/src/main/AndroidManifest.xml
+@@ -48,11 +48,10 @@
+             android:name=".MainActivity"
+             android:exported="true"
+             android:launchMode="singleTask"
+-            android:screenOrientation="portrait">
++            android:screenOrientation="landscape">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="android.intent.category.DEFAULT" />
+-                <category android:name="android.intent.category.HOME" />
+                 <category android:name="android.intent.category.LAUNCHER" />
+             </intent-filter>
+         </activity>

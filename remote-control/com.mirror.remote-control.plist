@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mirror.remote-control</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/mj/Library/Application Support/Mirror Remote/server.mjs</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/mj/Library/Application Support/Mirror Remote</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>MIRROR_HOST</key>
+    <string>192.168.0.51</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/mj/Library/Logs/mirror-remote.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mj/Library/Logs/mirror-remote-error.log</string>
+</dict>
+</plist>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080b0d">
+  <title>Mirror Remote</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">MIRROR</p>
+        <h1>Remote control</h1>
+      </div>
+      <span id="connection" class="status">Connecting…</span>
+    </header>
+
+    <section id="login" class="card login">
+      <h2>Connect</h2>
+      <p>Enter the private access key saved on the Mac.</p>
+      <form id="login-form">
+        <input id="token" type="password" autocomplete="current-password" placeholder="Access key" required>
+        <button type="submit" class="primary">Open remote</button>
+      </form>
+    </section>
+
+    <section id="remote" hidden>
+      <div class="screen-wrap">
+        <img id="screen" alt="Live Mirror screen" draggable="false">
+        <div id="screen-message">Loading screen…</div>
+      </div>
+
+      <nav class="main-controls" aria-label="Android navigation">
+        <button data-key="back" class="back">‹ <span>Back</span></button>
+        <button data-key="home">● <span>Home</span></button>
+        <button data-key="recents">▢ <span>Recent</span></button>
+      </nav>
+
+      <section class="card controls">
+        <div class="launch-row">
+          <button data-app="dashboard" class="primary">Mirror dashboard</button>
+          <button data-app="settings">Android settings</button>
+        </div>
+        <div class="dpad" aria-label="Directional navigation">
+          <button data-key="up" class="dpad-up" aria-label="Up">▲</button>
+          <button data-key="left" class="dpad-left" aria-label="Left">◀</button>
+          <button data-key="select" class="dpad-select" aria-label="Select">OK</button>
+          <button data-key="right" class="dpad-right" aria-label="Right">▶</button>
+          <button data-key="down" class="dpad-down" aria-label="Down">▼</button>
+        </div>
+        <div class="control-row">
+          <button data-key="volumeDown">− <span>Volume</span></button>
+          <button data-key="mute">Mute</button>
+          <button data-key="volumeUp">+ <span>Volume</span></button>
+        </div>
+        <div class="control-row">
+          <button data-key="wake">Wake</button>
+          <button data-key="sleep">Sleep</button>
+          <button id="open-mac">Mac view</button>
+        </div>
+        <form id="text-form" class="text-row">
+          <input id="text" type="text" maxlength="300" autocomplete="off" placeholder="Type on the Mirror">
+          <button type="submit" class="primary">Send</button>
+        </form>
+      </section>
+      <p class="hint">Tap the live screen to click, drag to swipe, or use the directional pad. Back is always pinned above the iPhone home bar.</p>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -21,7 +21,7 @@ Recovery baseline, with September 6 application/control updates:
 | Dashboard | `dev.mirror.repurpose` 1.8.2; four-digit pairing; local API on port 8787 |
 | Bluetooth | Enabled; Android profiles loaded |
 | Audio | Speaker playback and built-in microphone recording verified |
-| Camera | Kernel detects OV5640; Android preview not operational |
+| Camera | OV5640 detected; isolated 1080p test receives buffers, but usable imagery/color remains unverified |
 
 ## Latest checkpoint
 

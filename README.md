@@ -33,10 +33,10 @@ in the Android remote. Preview the design on the Mac at `http://127.0.0.1:8766/`
 its separate visual remote is at `/remote`. Build/install instructions and the
 experimental app architecture are in [clock-app/README.md](clock-app/README.md).
 
-The OV5640 camera is detected and opens without crashing, and its supported
-modes and two-lane CSI routing are configured. Preview is not yet operational:
-route 0 shows receiver activity, but no usable frames reach applications and
-the stream times out. The exact remaining cause is unresolved. See
+The OV5640 camera is detected, and its supported modes and two-lane CSI routing
+are configured. Preview is not yet verified usable: isolated tests receive
+continuous buffers at 1920×1080, but their color data is abnormal; other modes
+stall or fail. The exact remaining cause is unresolved. See
 [RECOVERY-STATUS.md](RECOVERY-STATUS.md) for exact evidence.
 
 ## Use the remote

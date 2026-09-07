@@ -6,10 +6,10 @@ There is one physical front camera. Android enumerates one camera; the
 replacement sensor library labels it BACK. That label does not indicate a
 second physical camera.
 
-Sensor discovery and parameter reads work. Preview still produces no frames.
-The latest route-0 tests produce substantial CSIPHY interrupt activity, very
-little CSID progress and a start-of-frame timeout. This does not yet establish
-the exact remaining hardware or driver configuration issue.
+Sensor discovery and parameter reads work. Earlier route-0 tests produced
+substantial CSIPHY interrupt activity, little CSID progress and start-of-frame
+timeouts. Later isolated-client tests below receive buffers in one mode, but
+do not yet establish usable camera images or the exact remaining cause.
 
 Earlier notes attributed the failure solely to ISP format selection and
 recommended route 1. Subsequent tests moved past additional ABI/stream-on
@@ -77,6 +77,34 @@ already available:
 
 These commands prepare artifacts; they do not flash the Mirror. The current
 system-image builder includes the experimental module and its boot-time load.
+
+## Isolated-client buffer checkpoint — September 6
+
+The dashboard was repeatedly reopening the camera and competing with Snapcam.
+Stopping both applications allowed a single-client test; Snapcam displayed
+solid green, which is not evidence of a usable scene image.
+
+The new `camera/probe` Android app records NV21 callback statistics and samples
+in its private files. The saved local reports show:
+
+| Preview / picture size | Result at 15 seconds |
+| --- | --- |
+| 640×480 / 2592×1944 | One nearly empty buffer; mean luma 0.0043 |
+| 1280×960 / 1280×960 | Camera error 100; zero callbacks |
+| 1920×1080 / 1920×1080 | 347 callbacks; mean luma about 43.64, sampled chroma ranges 0–10 |
+
+Continuous callbacks at 1080p are progress, but these statistics do not prove
+valid scene content or correct color interpretation. Raw reports remain local
+under `.work/camera-probe-*-20260906.txt`; they are not published.
+
+Build with `./mirror-build-camera-probe.sh`. Install the resulting
+`artifacts/android-apps/camera-probe-debug.apk` with ADB, grant
+`android.permission.CAMERA` to `dev.mirror.cameraprobe`, and launch
+`.ProbeActivity`. Integer intent extras `width`, `height`, `pictureWidth`, and
+`pictureHeight` select the test sizes; `zsl` defaults to `off`. Read
+`files/report.txt` with `run-as dev.mirror.cameraprobe`. Force-stop the probe
+between tests, and keep other camera consumers stopped. This is a diagnostic
+app, not the finished camera experience.
 
 ## Next camera session
 

@@ -1,7 +1,7 @@
 # Mirror Remote
 
 The MIRROR panel is not a touchscreen. This local service turns a Mac
-connected by USB into a control bridge for Safari on the same Mac or an iPhone
+connected by USB or authorized Wi-Fi ADB into a control bridge for Safari on the same Mac or an iPhone
 on the same Wi-Fi.
 
 ## Install
@@ -39,6 +39,9 @@ shown under its QR and remembers paired phone browsers.
   navigation.
 - **Wake** turns on the panel and dismisses its credential-free keyguard.
 - **Mirror dashboard** and **Android settings** open those apps directly.
+- **Afterglow clock** opens or reloads the experimental clock app.
+- **App menu** opens Afterglow's page address, reload, bundled-mode and
+  portrait/landscape settings.
 - **Mac view** launches a native `scrcpy` window on the Mac.
 
 The dashboard is optional. Launcher3 remains Android's normal home screen.
@@ -68,6 +71,12 @@ Reinstall/restart the controller after changing its source:
 Logs are stored at `~/Library/Logs/mirror-remote.log` and
 `~/Library/Logs/mirror-remote-error.log`.
 
-This bridge is intentionally local. Direct Android ADB over Wi-Fi is not the
-dependable path on this Android 6 build; the Mac's authorized USB connection
-is.
+The Wi-Fi connection at `192.168.0.51:5555` was verified authorized on September
+6, 2026. USB remains a fallback if network ADB becomes unavailable.
+
+The screen preview is a sequence of screenshots, not a video stream. A complex
+1920×1080 screen produced a roughly 4 MB PNG and took about 13 seconds to capture
+and transfer over Wi-Fi. Captures have a 30-second timeout, and simultaneous
+requests share a single capture. A delayed preview does not necessarily mean
+Android is offline; navigation controls can still work. The connection badge
+checks device reachability separately.

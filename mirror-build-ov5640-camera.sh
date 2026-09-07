@@ -68,7 +68,11 @@ cp "$sensors/includes/sensor_lib.h" /tmp/hy22-include/sensor_lib.h
 patch /tmp/hy22-include/sensor_lib.h < /hy22-abi.patch
 cp "$sensors/sensor_libs/ov5640/ov5640_lib.c" /tmp/ov5640_lib.c
 patch /tmp/ov5640_lib.c < /hy22-modes.patch
-hy22_flags="--sysroot=$sysroot -fPIC -shared -Wl,--no-undefined -I/tmp/hy22-include -I$sensors/includes -I/mnt/build/out/target/product/msm8916_64/obj/KERNEL_OBJ/usr/include -I/mnt/build/system/core/include"
+# msm8916 uses the Qualcomm VFE 4.0 camera pipeline. The normal Android make
+# hierarchy supplies this define from media-controller/Android.mk; retain it in
+# the standalone build so the OV5640 configures a normal two-lane CSI PHY
+# rather than the older combo-mode layout.
+hy22_flags="--sysroot=$sysroot -fPIC -shared -Wl,--no-undefined -DVFE_40 -I/tmp/hy22-include -I$sensors/includes -I/mnt/build/out/target/product/msm8916_64/obj/KERNEL_OBJ/usr/include -I/mnt/build/system/core/include"
 
 $cc $hy22_flags -Wl,-soname,libmmcamera_ov5640.so \
   -o /artifacts/libmmcamera_ov5640.so \

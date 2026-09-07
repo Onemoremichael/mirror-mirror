@@ -12,20 +12,31 @@ recovery, and board-specific partitions. The recovered system has:
 - a normal Launcher3 home screen and full 5.1 GiB userdata filesystem;
 - automatic Wi-Fi reconnection with working Internet and DNS;
 - authorized USB ADB from the owner's Mac;
-- a local Mac/iPhone web remote with live video, tap, swipe, text, Android
+- a local Mac/iPhone web remote with screenshot previews, tap, swipe, text, Android
   navigation, a directional pad, volume, wake/sleep, and app shortcuts;
 - working speakers, microphone, and Bluetooth;
 - an optional local dashboard app that is not forced as the Android home app.
 
-The panel is output-only—it has no touch layer. Keep the Mac connected to the
-MIRROR's internal USB data port for the dependable control bridge. Direct ADB
-over Wi-Fi remains unauthorized on this Android 6 daemon, so the web remote
-uses the Mac's authorized USB link.
+The panel is output-only—it has no touch layer. The web remote now works through
+authorized Wi-Fi ADB at `192.168.0.51:5555` (verified September 6, 2026), with USB
+available as a fallback. Screenshot previews can take several seconds over Wi-Fi.
+
+## Afterglow clock
+
+The **Afterglow** Android app is a clock with subtle orbital geometry
+on black. It loads the web experiment from the Mac and includes a bundled clock
+for offline use. It defaults to portrait, with portrait/landscape choices in its
+app menu. It is an ordinary app; Android still opens on Launcher3.
+
+Start the design server with `node ux-lab/server.mjs`, then use **Afterglow clock**
+in the Android remote. Preview the design on the Mac at `http://127.0.0.1:8766/`;
+its separate visual remote is at `/remote`. Build/install instructions and the
+experimental app architecture are in [clock-app/README.md](clock-app/README.md).
 
 The OV5640 camera is detected and opens without crashing, and its supported
 modes and two-lane CSI routing are configured. Preview is not yet operational:
-the legacy Qualcomm ISP does not accept the sensor's YUYV stream as its primary
-format, so applications receive no frames. See
+route 0 shows receiver activity, but no usable frames reach applications and
+the stream times out. The exact remaining cause is unresolved. See
 [RECOVERY-STATUS.md](RECOVERY-STATUS.md) for exact evidence.
 
 ## Use the remote
@@ -68,15 +79,17 @@ board drivers remain in place:
 ./mirror-build-running-kernel-wifi.sh
 ./mirror-build-ov5640-camera.sh
 ./mirror-build-camera-compat.sh
+./mirror-patch-camera-cpp.sh
+./mirror-build-camera-diag.sh
 ./mirror-build-final-system.sh
 ```
 
 The final sparse image is ignored by Git at
-`artifacts/android-m-msm8916_64/system-mirror-final.img`. The image currently
-running on the tested unit has SHA-256:
+`artifacts/android-m-msm8916_64/system-mirror-final.img`. The latest local image
+includes experimental CSI diagnostics and **has not been flashed**. Its SHA-256 is:
 
 ```text
-2e8f2082ac9f416b490630f5f1052d3b48aa297ea3867d79bdc5ce5fe0bb80e4
+eedf1f328e0fab49c98425e394a0882141564b9c581e665a05fd0e8c3ce8d249
 ```
 
 `patches/android-m-mirror-revival.patch` records the owner-key, userdata,

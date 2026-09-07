@@ -1,4 +1,4 @@
-# Mirror recovery status — 2026-09-05
+# Mirror recovery status — 2026-09-06
 
 ## Usable Android system
 
@@ -7,45 +7,71 @@ The tested MIRROR boots Android 6.0.1 `msm8916_64-userdebug` to Launcher3 at
 board-specific partitions are preserved. The reconstructed `system` partition
 and a fresh Android-compatible `userdata` filesystem are the material changes.
 
-Verified after the final reboot:
+Recovery baseline, with September 6 application/control updates:
 
 | Capability | Result |
 | --- | --- |
 | Android boot | `sys.boot_completed=1` |
-| Display | 1920×1080 landscape; Launcher3 visible; keyguard dismissed |
+| Display | Android desktop usable; Afterglow now renders in 1080×1920 portrait |
 | Userdata | 5.1 GiB total, 4.6 GiB free |
-| USB control | ADB authorized as serial `be9d0af` |
+| ADB control | USB previously verified; Wi-Fi `192.168.0.51:5555` authorized and in use |
 | Wi-Fi | `SETUP-A040`, `192.168.0.51`, driver status `ok` |
-| Phone/Mac remote | Live screen and controls through Mac service on port 8765 |
+| Phone/Mac remote | Screenshot preview and controls through Mac service on port 8765 |
+| Afterglow | `dev.mirror.clock` 0.1; live web clock and bundled fallback tested |
 | Dashboard | `dev.mirror.repurpose` 1.8.2; four-digit pairing; local API on port 8787 |
 | Bluetooth | Enabled; Android profiles loaded |
 | Audio | Speaker playback and built-in microphone recording verified |
 | Camera | Kernel detects OV5640; Android preview not operational |
 
-The final sparse system image has SHA-256:
+## Latest checkpoint
+
+Afterglow was built, installed and visually verified on the Mirror in landscape
+and portrait. Portrait is now the remembered setting. The clock keeps a black
+background with sparse orbital animation, uses thin Android typography and
+displays America/New_York time. It is an ordinary app, not the default launcher.
+
+The Mac's `ux-lab` server serves the live design at port 8766. The app remembers
+its live page address and carries bundled assets for offline use. A deliberate
+HTTP failure correctly fell back to the bundled clock. Home, relaunch, the
+native app menu, Sleep and Wake were tested through the remote.
+
+Installed Afterglow APK SHA-256:
 
 ```text
-2e8f2082ac9f416b490630f5f1052d3b48aa297ea3867d79bdc5ce5fe0bb80e4
+56f4700dfd7c68f1bd9e49d03fdbfee1247f05adc21f6457361da46b966e9dc7
 ```
+
+The latest prepared sparse system image contains experimental camera
+diagnostics and **has not been flashed**:
+
+```text
+eedf1f328e0fab49c98425e394a0882141564b9c581e665a05fd0e8c3ce8d249
+```
+
+The older hash 2e8f2082… was an earlier recovery checkpoint, not the current
+prepared image. No firmware flash was needed for the clock work.
 
 ## Durable control
 
-The display has no touch layer. The dependable path is:
+The display has no touch layer. The current path is:
 
 ```text
-iPhone or Mac browser → local web remote on Mac → authorized USB ADB → MIRROR
+iPhone or Mac browser → local web remote on Mac → authorized Wi-Fi ADB → MIRROR
 ```
 
-The Mac service starts at login, binds port 8765 on the trusted local network,
-and keeps the Mac awake while on external power. It opens without an account or
-access-key prompt and offers live screen updates, tap/swipe/text input,
-Back/Home/Recent, D-pad/OK, volume, wake/sleep, Settings, dashboard, and native
-`scrcpy` launch. Wake also dismisses the credential-free keyguard.
+USB serial `be9d0af` remains a fallback. The earlier TCP authorization problem
+is no longer present in the current session.
 
-Direct TCP ADB reaches `192.168.0.51:5555`, and the framework recognizes the
-owner's key, but this old daemon leaves the TCP transport unauthorized while
-USB remains the verified transport. The web bridge therefore prefers an
-authorized connection and safely falls back to the USB serial.
+The Mac service starts at login, binds port 8765 on the trusted local network
+and keeps the Mac awake while on external power. It opens without an account
+or access key. The controls include Back/Home/Recent, D-pad/OK, tap/swipe/text,
+volume, Sleep/Wake and app shortcuts, now including Afterglow and App menu.
+
+Screen previews are snapshots, not video. A complex roughly 4 MB screenshot
+took about 13 seconds over Wi-Fi, exceeding the old eight-second timeout.
+Captures now allow 30 seconds and concurrent requests share a single capture.
+Wake sends the keyguard-dismiss menu key only if the lock screen is actually
+showing, so waking Afterglow does not accidentally open its menu.
 
 ## Wi-Fi, audio, and storage
 
@@ -86,32 +112,27 @@ this custom sparse image caused the later chunk to be rejected.
 
 ## Camera boundary
 
-The camera now advances substantially beyond the original crash:
+There is one physical front camera. The replacement Android sensor library
+labels it BACK, but Android enumerates only one device.
 
-1. The stock kernel registers the `ov5640` sensor.
-2. Ten Qualcomm media-controller modules omitted by the userdebug product
-   recipe are restored, with the narrow fixed-focus compatibility symbols from
-   `camera/legacy-camera-compat.c`.
-3. The HY22 sensor-library ABI mismatch is corrected. The daemon stays alive,
-   Android reports one camera, and applications open it successfully.
-4. The library exposes the three modes the kernel actually implements and uses
-   the board's explicit two-lane CSI route: lane assignment `0x4320`, mask `7`,
-   CSID core/PHY `1`.
+OV5640 discovery and configuration work. Later experiments corrected an
+88-byte/104-byte ISP ioctl mismatch, adjusted the CPP initial-AEC failure path,
+selected the active CSIPHY0/CSID0 route and built the sensor library with
+VFE_40 (combo_mode=0). No usable preview frames arrive; the stream still times
+out. Significant PHY interrupt activity does not yet establish correct packet
+decoding or the exact remaining cause.
 
-The installed OV5640 library has SHA-256:
+The installed sensor library was read back on September 6 with SHA-256:
 
 ```text
-c268c69d8efa15f603f936c9a5aa987ad4d551bd9eef6472152a8dc4b49d951f
+e748793df9a7be7576bc94077012fa2ff8afa94564f8bb64925dd6cf6c20048a
 ```
 
-Preview is still not claimed as working. The remaining failure is downstream
-of sensor discovery and configuration: the legacy Qualcomm ISP reports that it
-cannot find a primary format for the OV5640 YUYV stream, stream-on does not
-propagate through ISP/CPP/C2D, and applications receive zero frames. There are
-no sensor-resolution or CSI-configuration errors in the latest run. This is a
-focused vendor ISP-format integration boundary, not a missing camera, broken
-sensor, or daemon crash. See [CAMERA-RECOVERY.md](CAMERA-RECOVERY.md) for the
-reproducible build and evidence.
+A diagnostic module to expose CSI registers was built into the prepared image,
+but that image remains unflashed and `/proc/mirror_camera_diag` is absent on
+the running unit. Camera work is paused. See
+[CAMERA-RECOVERY.md](CAMERA-RECOVERY.md) for the corrected route, evidence,
+build order and next diagnostic step.
 
 ## Flash history and boundaries
 

@@ -33,7 +33,7 @@ async function refreshScreen() {
   refreshing = true;
   try {
     const response = await fetch(`/api/screen?t=${Date.now()}`, { cache: 'no-store' });
-    if (!response.ok) throw new Error('Screen unavailable');
+    if (!response.ok) throw new Error('Preview delayed. Retrying… Controls may still work.');
     const blob = await response.blob();
     const previous = screen.src;
     screen.src = URL.createObjectURL(blob);
@@ -44,8 +44,7 @@ async function refreshScreen() {
   } catch (error) {
     screenMessage.hidden = false;
     screenMessage.textContent = error.message;
-    connection.textContent = 'Reconnecting…';
-    connection.classList.remove('online');
+    refreshStatus();
   } finally {
     refreshing = false;
   }

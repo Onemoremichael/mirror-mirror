@@ -15,6 +15,23 @@ const adb = process.env.ADB_PATH || '/opt/homebrew/bin/adb';
 const scrcpy = process.env.SCRCPY_PATH || '/opt/homebrew/bin/scrcpy';
 let knownMirrorHost = process.env.MIRROR_HOST || '';
 let lastNetworkConnectAttempt = 0;
+let screenCapture = null;
+
+// A full-resolution PNG can take longer than an input command over Wi-Fi.
+// Share concurrent requests so multiple remote tabs do not queue captures.
+function captureScreen() {
+  if (!screenCapture) {
+    screenCapture = adbCall(['exec-out', 'screencap', '-p'], {
+      encoding: 'buffer', timeout: 30000,
+    }).then(({ stdout }) => {
+      if (!Buffer.isBuffer(stdout) || stdout.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
+        throw new Error('The Mirror did not return a screen image');
+      }
+      return stdout;
+    }).finally(() => { screenCapture = null; });
+  }
+  return screenCapture;
+}
 
 // Keep the Mac reachable while it is on external power. The assertion ends
 // automatically if this service stops, and does not block display sleep.
@@ -39,6 +56,7 @@ const mimeTypes = {
 const allowedKeys = new Map([
   ['back', '4'],
   ['home', '3'],
+  ['menu', '82'],
   ['recents', '187'],
   ['volumeUp', '24'],
   ['volumeDown', '25'],
@@ -55,6 +73,7 @@ const allowedKeys = new Map([
 ]);
 
 const allowedApps = new Map([
+  ['clock', ['shell', 'am', 'start', '-n', 'dev.mirror.clock/.ClockActivity']],
   ['dashboard', ['shell', 'am', 'start', '-n', 'dev.mirror.repurpose/.MainActivity']],
   ['settings', ['shell', 'am', 'start', '-a', 'android.settings.SETTINGS']],
 ]);
@@ -175,7 +194,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'GET' && url.pathname === '/api/screen') {
-      const { stdout } = await adbCall(['exec-out', 'screencap', '-p'], { encoding: 'buffer' });
+      const stdout = await captureScreen();
       response.writeHead(200, {
         'Content-Type': 'image/png',
         'Content-Length': stdout.length,
@@ -194,7 +213,10 @@ const server = createServer(async (request, response) => {
         // credential-free keyguard so the phone remote never strands the user.
         await adbCall(['shell', 'input', 'keyevent', keyCode]);
         await new Promise((resolve) => setTimeout(resolve, 180));
-        await adbCall(['shell', 'input', 'keyevent', '82']);
+        const { stdout: policy } = await adbCall(['shell', 'dumpsys', 'window', 'policy']);
+        if (/(?:^|\n)\s*showing=true\b/.test(String(policy))) {
+          await adbCall(['shell', 'input', 'keyevent', '82']);
+        }
       } else {
         await adbCall(['shell', 'input', 'keyevent', keyCode]);
       }

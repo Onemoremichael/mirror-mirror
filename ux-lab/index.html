@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#000000"><title>Afterglow · Orbital clock</title><link rel="stylesheet" href="./style.css"></head>
+<body>
+<main class="display" aria-label="Orbital clock">
+  <div class="universe" aria-hidden="true">
+    <svg class="celestial" viewBox="0 0 1000 1000" fill="none">
+      <g class="reference-rings"><circle cx="500" cy="500" r="440"/><circle cx="500" cy="500" r="424"/><circle cx="500" cy="500" r="335"/><circle cx="500" cy="500" r="245"/></g>
+      <g id="ticks"></g>
+      <g class="meridians"><ellipse cx="500" cy="500" rx="424" ry="185" transform="rotate(-32 500 500)"/><ellipse cx="500" cy="500" rx="424" ry="185" transform="rotate(32 500 500)"/><ellipse cx="500" cy="500" rx="424" ry="185" transform="rotate(90 500 500)"/></g>
+      <g class="orbit-track orbit-outer"><path class="trail" d="M 500,60 A 440,440 0 0 1 811,189"/><circle class="point" cx="500" cy="60" r="4"/></g>
+      <g class="orbit-track orbit-middle"><path class="trail" d="M 500,165 A 335,335 0 0 0 263,263"/><g transform="translate(500 165)"><circle class="planet" r="7"/><g class="epicycle"><circle class="moon-track" r="28"/><circle class="moon" cy="-28" r="2.5"/></g></g></g>
+      <g class="orbit-track orbit-inner"><circle class="point" cx="500" cy="255" r="3"/></g>
+      <g class="fixed-stars"><path d="M 498 10 L 502 10 M 500 8 L 500 12 M 498 990 L 502 990 M 500 988 L 500 992 M 10 498 L 10 502 M 8 500 L 12 500 M 990 498 L 990 502 M 988 500 L 992 500"/></g>
+    </svg>
+  </div>
+  <time class="clock-face" id="clock" aria-label="Current time"><span id="hours">00</span><span class="colon" aria-hidden="true">:</span><span id="minutes">00</span></time>
+  <div class="seconds-track" aria-hidden="true"><span id="seconds-mark"></span></div>
+</main>
+<aside class="remote-panel" aria-label="Clock remote">
+  <a class="wordmark" href="/">✳ AFTERGLOW</a>
+  <h1>A little<br><em>space & time.</em></h1>
+  <div class="remote-modes"><button data-mode="orbit"><span>◎</span><strong>Orbit</strong><small>Slow celestial motion</small></button><button data-mode="drift"><span>◌</span><strong>Still</strong><small>Hold the constellation</small></button><button data-mode="reflection"><span>○</span><strong>Clock only</strong><small>All room for reflection</small></button></div>
+  <div class="setting"><span>Light</span><div class="swatches"><button data-palette="amber" aria-label="Amber" class="amber"></button><button data-palette="lilac" aria-label="Lilac" class="lilac"></button><button data-palette="ice" aria-label="Ice" class="ice"></button></div></div>
+  <button id="dim" class="setting dim-toggle" aria-pressed="false"><span>Low glow</span><span class="switch"></span></button>
+  <p id="remote-status" role="status">Connecting…</p>
+  <a class="display-link" href="/" target="_blank" rel="noopener">Open clock ↗</a>
+</aside>
+<script src="./app.js"></script>
+</body></html>

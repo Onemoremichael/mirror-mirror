@@ -1,0 +1,52 @@
+--- a/hardware/qcom/camera/QCamera2/HAL/QCameraParameters.h
++++ b/hardware/qcom/camera/QCamera2/HAL/QCameraParameters.h
+@@ -594,2 +594,3 @@
+     int32_t commitParameters();
++    int32_t reapplyMirrorExposure();
+     int getPreviewHalPixelFormat() const;
+--- a/hardware/qcom/camera/QCamera2/HAL/QCameraParameters.cpp
++++ b/hardware/qcom/camera/QCamera2/HAL/QCameraParameters.cpp
+@@ -4396,5 +4396,27 @@
+ int32_t QCameraParameters::commitParameters()
+ {
+     return commitSetBatch();
+ }
++
++// Called under the HAL parameter lock after successful preview startup.
++// Resend only exposure, without changing the app-visible cached value.
++int32_t QCameraParameters::reapplyMirrorExposure()
++{
++    if (!m_pParamBuf || !m_pCapability || !m_pCamOpsTbl) return NO_INIT;
++    int value = getInt(KEY_EXPOSURE_COMPENSATION);
++    if (value < m_pCapability->exposure_compensation_min ||
++        value > m_pCapability->exposure_compensation_max) return BAD_VALUE;
++    void *saved = malloc(sizeof(*m_pParamBuf));
++    if (!saved) return NO_MEMORY;
++    memcpy(saved, m_pParamBuf, sizeof(*m_pParamBuf));
++    int32_t rc = initBatchUpdate(m_pParamBuf);
++    if (rc == NO_ERROR) rc = AddSetParmEntryToBatch(m_pParamBuf,
++        CAM_INTF_PARM_EXPOSURE_COMPENSATION, sizeof(value), &value);
++    if (rc == NO_ERROR)
++        rc = m_pCamOpsTbl->ops->set_parms(m_pCamOpsTbl->camera_handle, m_pParamBuf);
++    ALOGI("Mirror startup exposure value=%d result=%d", value, rc);
++    memcpy(m_pParamBuf, saved, sizeof(*m_pParamBuf));
++    free(saved);
++    return rc;
++}
+ 
+--- a/hardware/qcom/camera/QCamera2/HAL/QCamera2HWI.cpp
++++ b/hardware/qcom/camera/QCamera2/HAL/QCamera2HWI.cpp
+@@ -2094,4 +2094,13 @@
+         if (focusMode == CAM_FOCUS_MODE_CONTINOUS_PICTURE)
+             mCameraHandle->ops->cancel_auto_focus(mCameraHandle->camera_handle);
+     }
++    char mirrorExposure[PROPERTY_VALUE_MAX];
++    property_get("debug.mirror.exposure_bridge", mirrorExposure, "0");
++    if (rc == NO_ERROR && !strcmp(mirrorExposure, "1")) {
++        pthread_mutex_lock(&m_parm_lock);
++        int32_t exposureRc = mParameters.reapplyMirrorExposure();
++        pthread_mutex_unlock(&m_parm_lock);
++        if (exposureRc != NO_ERROR)
++            ALOGE("Mirror startup exposure failed: %d", exposureRc);
++    }
+ #ifdef TARGET_TS_MAKEUP

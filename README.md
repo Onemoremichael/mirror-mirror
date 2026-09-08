@@ -97,7 +97,7 @@ The final sparse image is ignored by Git at
 was flashed to `system` and boot-verified. Its checkpoint SHA-256 is:
 
 ```text
-a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38
+36a056b88be096cef975dfeea24f982aa5020d88ff5944c258278ca69a4ca18d
 ```
 
 `patches/android-m-mirror-revival.patch` records the owner-key, userdata,
@@ -117,6 +117,12 @@ and yields about 1.9× preview brightness at positive compensation, but the imag
 is still dark/noisy. Zero compensation restores stock targets and gain ceiling.
 See the camera guide for measurements and remaining tests—not a claim of full
 camera recovery.
+
+The installed camera HAL now resends the requested exposure after preview starts,
+fixing the observed startup loss in its first device test. The brighter setting
+also reached a saved JPEG in the preceding capture test. Development is paused
+at the owner's request: the camera was closed cleanly with stock exposure
+restored. Repeated-start, capture/video regression and image-quality work remain.
 
 The optional dashboard is pinned to a known upstream revision and built with:
 

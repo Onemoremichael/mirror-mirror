@@ -42,6 +42,7 @@ docker run --rm --platform linux/amd64 --privileged \
   -e MIRROR_GAIN_HEADROOM="${MIRROR_GAIN_HEADROOM:-0}" \
   -v "$repo_root/camera/mirror-camera-metadata.patch:/inputs/camera-metadata.patch:ro" \
   -v "$repo_root/camera/mirror-camera-mount-correction.patch:/inputs/camera-mount-correction.patch:ro" \
+  -v "$repo_root/camera/mirror-camera-startup-exposure.patch:/inputs/camera-startup-exposure.patch:ro" \
   -v "$repo_root/camera/mirror-camera-raw-video.patch:/inputs/raw-video.patch:ro" \
   -v "$repo_root/camera/mirror-codec-video-pack.patch:/inputs/codec-video-pack.patch:ro" \
   -v "$repo_root/camera/mirror-video-pack.h:/inputs/mirror-video-pack.h:ro" \
@@ -106,6 +107,13 @@ if [ "$MIRROR_REBUILD_CAMERA_HAL" = 1 ]; then
   if ! grep -q "Mirror camera metadata: front, mount 0" "$camera_factory"; then
     patch "$camera_factory" < /inputs/camera-mount-correction.patch
   fi
+  for camera_part in QCameraParameters.h QCameraParameters.cpp QCamera2HWI.cpp; do
+    camera_path="hardware/qcom/camera/QCamera2/HAL/$camera_part"
+    if ! grep -q "reapplyMirrorExposure" "$camera_path"; then
+      git apply --check --include="$camera_path" /inputs/camera-startup-exposure.patch
+      git apply --include="$camera_path" /inputs/camera-startup-exposure.patch
+    fi
+  done
   make -j4 camera.msm8916_32 2>&1 | tee /artifacts/mirror-camera-hal-build.log
 fi
 

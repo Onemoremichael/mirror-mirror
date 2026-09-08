@@ -38,6 +38,8 @@ docker run --rm --platform linux/amd64 --privileged \
   -e MIRROR_REBUILD_CAMERA_HAL="${MIRROR_REBUILD_CAMERA_HAL:-0}" \
   -e MIRROR_CAMERA_FRONT="${MIRROR_CAMERA_FRONT:-0}" \
   -e MIRROR_VIDEO_RAW="${MIRROR_VIDEO_RAW:-1}" \
+  -e MIRROR_EXPOSURE_BRIDGE="${MIRROR_EXPOSURE_BRIDGE:-0}" \
+  -e MIRROR_GAIN_HEADROOM="${MIRROR_GAIN_HEADROOM:-0}" \
   -v "$repo_root/camera/mirror-camera-metadata.patch:/inputs/camera-metadata.patch:ro" \
   -v "$repo_root/camera/mirror-camera-mount-correction.patch:/inputs/camera-mount-correction.patch:ro" \
   -v "$repo_root/camera/mirror-camera-raw-video.patch:/inputs/raw-video.patch:ro" \
@@ -190,6 +192,15 @@ fi
 sed -i "/^ro.mirror.camera.front=/d" out/target/product/msm8916_64/system/build.prop
 printf "\nro.mirror.camera.front=%s\n" "$MIRROR_CAMERA_FRONT" >> out/target/product/msm8916_64/system/build.prop
 case "$MIRROR_VIDEO_RAW" in 0|1) ;; *) echo "MIRROR_VIDEO_RAW must be 0 or 1" >&2; exit 1 ;; esac
+case "$MIRROR_EXPOSURE_BRIDGE" in 0|1) ;; *) echo "MIRROR_EXPOSURE_BRIDGE must be 0 or 1" >&2; exit 1 ;; esac
+case "$MIRROR_GAIN_HEADROOM" in 0|1) ;; *) echo "MIRROR_GAIN_HEADROOM must be 0 or 1" >&2; exit 1 ;; esac
+if [ "$MIRROR_GAIN_HEADROOM" = 1 ] && [ "$MIRROR_EXPOSURE_BRIDGE" != 1 ]; then
+  echo "Gain headroom requires the exposure bridge" >&2; exit 1
+fi
+sed -i "/^debug.mirror.gain_headroom=/d" out/target/product/msm8916_64/system/build.prop
+printf "\ndebug.mirror.gain_headroom=%s\n" "$MIRROR_GAIN_HEADROOM" >> out/target/product/msm8916_64/system/build.prop
+sed -i "/^debug.mirror.exposure_bridge=/d" out/target/product/msm8916_64/system/build.prop
+printf "\ndebug.mirror.exposure_bridge=%s\n" "$MIRROR_EXPOSURE_BRIDGE" >> out/target/product/msm8916_64/system/build.prop
 # Persist the tested raw-buffer path across reboots; shell can still override
 # this debug property for hardware-encoder investigation without reflashing.
 sed -i "/^debug.mirror.video_raw=/d" out/target/product/msm8916_64/system/build.prop
@@ -207,6 +218,11 @@ mount -o loop,ro "$raw" "$inspect"
 grep -qx "service.adb.tcp.port=5555" "$inspect/build.prop"
 grep -qx "ro.mirror.camera.front=$MIRROR_CAMERA_FRONT" "$inspect/build.prop"
 grep -qx "debug.mirror.video_raw=$MIRROR_VIDEO_RAW" "$inspect/build.prop"
+grep -qx "debug.mirror.exposure_bridge=$MIRROR_EXPOSURE_BRIDGE" "$inspect/build.prop"
+grep -qx "debug.mirror.gain_headroom=$MIRROR_GAIN_HEADROOM" "$inspect/build.prop"
+if [ "$MIRROR_EXPOSURE_BRIDGE" = 1 ]; then
+  grep -a -q "OV5640 target steps=" "$inspect/vendor/lib/libmmcamera_mirror_haf.so"
+fi
 if [ "$MIRROR_CAMERA_FRONT" = 1 ]; then
   grep -a -q "Mirror camera metadata: front, mount 0" "$inspect/lib/hw/camera.msm8916.so"
   sha256sum "$inspect/lib/hw/camera.msm8916.so"

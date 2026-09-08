@@ -1064,3 +1064,211 @@ deprecation warning only). Local system and Snapcam hashes matched the recorded
 checkpoint. Staged files contain source/docs only; private captures, binaries
 and unrelated personal notes were excluded. Full Android/Snapcam system builds
 and live camera tests were not repeated during this documentation review.
+
+## Resumed exposure-path audit: installed binary corroboration
+
+After the merged documentation checkpoint, read-only analysis resumed. The
+running sensor module was streamed through SHA-256 and matches the local HY22
+input exactly: `2dfe67d7997c3caf462217be90f29258f59f1d90a81fe8a16e77228fba046f8b`.
+Thumb disassembly identifies the exposure handler's command-18 construction at
+`0x119fa`, ioctl request literal `0xc09056c1` at `0x11ae0`, and its call through
+the wrapper at `0xde74`; that wrapper calls `ioctl@plt` at `0xde86`. The nearby
+PC-relative logging string resolves to `sensor_set_exposure_compensation`.
+This corroborates the reference implementation in the exact installed binary,
+but does not yet prove runtime dispatch or a successful kernel register update.
+
+The preceding +2 EV run's retained log shows the app accepted steps12 and
+reported compensation12, preview90, 405 frames at15s and clean release3437ms;
+frame300 mean luma was16.7913. No MirrorSensorABI entries remain in the current
+ring buffer. Bounded tracing and ring retention mean their absence is not proof
+that no command was issued. Do not infer that the control is missing merely
+from missing logs. Next evidence needed: fresh runtime command/return tracing
+and stock command-18 dispatch behavior. No firmware or sensor registers were
+changed during this static audit.
+
+## Live exposure sweep: startup-only parameter loss is insufficient explanation
+
+Added an opt-in `exposureSweep` diagnostic: during one preview it requests
+steps12 at5s, steps-12 at12s, then0 at19s. Changes use advertised Camera API
+bounds, not direct sensor writes. The first attempt produced one near-empty
+frame at8518ms (mean0.000752) and was excluded from exposure conclusions;
+release completed2665ms. This re-observes the intermittent startup defect.
+
+After confirmed release/idle, a fresh attempt delivered first frame847ms and
+continuous preview. Baseline frame60 mean16.7184; live+12 accepted at frame119;
+frame300 mean16.8413. Live-12 was accepted at314 and zero restored at517;
+frame600 mean16.8168. There was no sampled frame inside the negative-EV interval,
+so do not claim a measured negative-EV result. Live+2EV did not meaningfully
+brighten this valid stream: startup-only parameter loss cannot fully explain
+the ineffective control. The final source adds a60-frame minimum before sweep
+changes, to avoid applying them during a failed startup; that guard has not yet
+been rebuilt/deployed. The preceding sweep APK did build and install successfully.
+
+Shell sensor-debug property writes still read back1, and `adb root` is refused.
+No new sensor-handler log entries were available. No firmware changes or direct
+register writes were made. Home ends the test and the clock is not restored.
+
+## Exposure sweep with simultaneous sensor readback
+
+Rebuilt/deployed the sweep guard and added luma reporting every60 frames during
+the opt-in sweep. One valid continuous preview started at797ms. At4/9/16/23s,
+the guarded exposure interface returned sensor5640, CCI enabled with one
+reference, and identical values for all20 sampled registers. This covers
+baseline/+2EV/-2EV/restored-zero intervals. In particular integration remained
+`00/45/c0`, gain`02/00`, gain ceiling`02/00`, targets`30/28/30/26`, and
+brightness`00/01`. API readback accepted12, -12 and0 at frames115/289/468.
+
+Baseline frame60 luma16.8496; +2EV frame18016.6832 and frame24016.8453;
+-2EV frame36016.5528 and frame42016.8455; restored-zero frame54016.7233.
+Thus neither sign of compensation produced a meaningful measured response in
+this lit scene, including the sensor's sampled exposure settings. This is
+stronger than the earlier startup-only test, but does not identify the exact
+layer dropping/ignoring the command or prove that every sensor register is
+unchanged. Investigate dispatch/driver support before implementing a software
+brightness workaround. Private reports:
+`.work/exposure-register-sweep-1788828395327`. Clean release357ms; no firmware
+or sensor-register writes were performed. The changes were standard camera API
+requests and bounded sensor reads; zero was restored before closing.
+
+## Stock exposure handler is a successful no-op
+
+A guarded dispatch decoder now verifies ten exact AArch64 instructions at
+config32+0x24, bounds its48-byte jump-table read to named kernel rodata and
+validates all24 targets within the inspected function. It exposes command
+numbers/relative offsets only: no arbitrary reads, execution or sensor writes.
+Module build passed with stock symbol versions and no GOT relocations.
+Module SHA256: `3c08c45d1a11749169b24481eec3fd30b56816cc6ce892716a120579663532ac`.
+System SHA256: `93a1dee922fdd55be624a865bcca346a732d5ea59a28f44c42975dd3068cf92b`.
+System-only flash77.386s, reboot completed1; table read succeeded with camera
+closed. The previous d4f5 image is retained locally. Sensor/HAL/media/CPP/Wi-Fi
+hashes remained unchanged in the generated filesystem.
+
+Commands14 through24, including exposure compensation18, all dispatch to
+config32+0x58c. Captured code there sets x19=0, unlocks the mutex and returns
+w0=w19. It reads no control value and writes no sensor register. Thus exposure
+compensation is an unimplemented control that returns success. Command25 and
+normal mode/start/stop have distinct handlers. Runtime forwarding may still
+need verification, but forwarding alone cannot fix a no-op handler.
+
+Next: implement a narrowly scoped reversible exposure path with validated
+register limits and normal AEC preserved. No exposure correction is installed
+yet. This finding does not resolve intermittent startup or prove that exposure
+compensation alone explains all of the darkness.
+
+## Exposure implementation preparation
+
+Cross-checked the six AEC target register roles against Linux's
+[OV5640 driver](https://code.googlesource.com/linux/torvalds/linux/+/refs/heads/master/drivers/media/i2c/ov5640.c)
+(`ov5640_set_ae_target`). Both captured stock mode tables contain the same
+baseline: addresses3a0f/3a10/3a1b/3a1e/3a11/3a1f map to30/28/30/26/60/14 hex.
+Added a pure, not-yet-connected register-plan helper: Android's -12..12 steps
+scale those baselines at1/6EV, clamp to byte range, and exactly restore stock at0.
+No gain-ceiling, integration-time, frame-length, clock or AEC-enable writes are
+part of that plan. This is a proposed mapping, not a claim of calibrated sensor
+EV response. Existing gain/exposure saturation may limit positive response.
+
+Host tests passed with address/undefined-behavior sanitizers: invalid bounds,
+monotonic output, ordered target windows, byte saturation and exact zero-EV
+restoration. The helper has not been connected to ioctl forwarding or deployed.
+The observed sensor node is v4l-subdev6, but future forwarding must verify its
+sysfs name is ov5640 rather than assuming that enumeration is permanent.
+
+## Exposure bridge built, not yet enabled on device
+
+Connected the target-plan helper to the32-bit compatibility ioctl hook. It
+requires explicit `debug.mirror.exposure_bridge=1`, exact request0xc09056c1,
+command18, a file descriptor resolving to a numeric v4l-subdev path and sysfs
+name `ov5640`. Other requests retain their original path. Accepted steps are
+-12..12; null/out-of-range values fail. Six fixed target registers are sent
+through existing command2 (CFG_WRITE_I2C_ARRAY), whose stock handler is present.
+The24-byte setting and8-byte entries match stock config32 disassembly, with
+compile-time size/offset checks. The real ioctl return/errno is propagated;
+there is no claim of atomic multi-register writes or rollback on an I2C error.
+
+The final bridge compiled with -Wall/-Wextra/-Werror; SHA256
+`09e56650ffedc0b9e26ea31477b2f6d2a7385b068e1e1ff7a6301c05b7f777ca`.
+Daemon hash is unchanged. Final-image builder now supports
+`MIRROR_EXPOSURE_BRIDGE=1` (default0), validates0/1, and checks the enabled
+property plus bridge marker in the image. Shell syntax/diff checks passed.
+No new system image was built/flashed for this bridge yet; the installed93a1
+diagnostic image remains current. Next test must confirm command interception,
+kernel success and register readback before judging brightness. Positive gain
+headroom remains separately limited by the observed configured ceiling.
+
+## Exposure bridge live verification: register control works, darkness persists
+
+Installed bridge-enabled system SHA256
+`3777cfc1059cc8018bc22c17b889e5218c16a56b80e3354e74dfa25569eee33c`
+with system-only flash76.423s. Boot completed1, exposure_bridge1; installed
+compatibility-library hash matches09e56650…f777ca. The initial unauthorized
+ADB state cleared after normal boot; no key or userdata changes were needed.
+
+Valid continuous preview first frame883ms. Readback at4s showed stock targets;
+at9s (+12) targets3a0f/10/1b/1e became c0/a0/c0/98; at16s (-12) they became
+0c/0a/0c/0a; at23s (zero) they returned30/28/30/26. This confirms interception
+and actual sensor register updates, despite no retained MirrorExposure log
+entries. Only four of the six target registers are in the current diagnostic
+read set; do not claim direct readback of the other two.
+
+Luma remained roughly16.35–16.82, while integration00/45/c0 and gain02/00 stayed
+fixed at all snapshots. AEC enabled, gain ceiling02/00 and frame length04/60
+also remained unchanged. Thus the missing command is repaired at the register
+level, but brightness is not fixed. Next investigate AEC's own measured average
+and its gain/integration limits, alongside an external lens-cover check. Do not
+claim that target changes alone can overcome saturation or optical attenuation.
+Private evidence: `.work/exposure-bridge-1788829618837`. Zero restored and camera
+released117ms. No automatic clock restoration.
+
+## Gain headroom experiment prepared (not deployed)
+
+The [OV5640 datasheet](https://cdn.sparkfun.com/datasheets/Sensors/LightImaging/OV5640_DS.pdf)
+and [Linux gain-control correction](https://git.ti.com/cgit/ti-linux-kernel/ti-linux-kernel/commit/drivers/media/i2c/ov5640.c?h=ti-linux-6.1.y&id=ee56050deee888643f1d640caf3ea83d0034e009)
+identify a10-bit gain ceiling in3a18/19. The observed0x200 leaves approximately
+another factor of two before0x3ff. Increasing gain also amplifies noise; the
+analogue/digital split is not assumed.
+
+Added optional `debug.mirror.gain_headroom=1`: positive exposure requests append
+ceiling0x3ff to the existing target writes; zero/negative requests restore the
+observed stock0x200. Default remains disabled. This does not force manual gain,
+change AEC enable, lengthen frames or change clocks. The final builder accepts
+`MIRROR_GAIN_HEADROOM=1` only alongside the exposure bridge. Gain and target
+changes together require comparison against the already measured target-only
+test; no isolated gain response has been measured yet.
+
+Expanded guarded readback from20 to23 registers with fast-target3a11/1f and
+sensor average56a1. Both builds passed: compatibility library
+`bf1dd1c8a68e77d161584ea14c863ccb4ae4fcc411264f22d862eb501d4934ef`,
+diagnostic module
+`f0e8000420cce72007b138109149c14ef8898e61ab1d31a516720f4c8b0afb65`.
+Existing target-plan sanitizer tests and builder syntax passed. These components
+have not yet been packed/flashed; installed3777cfc1… remains current. User's
+non-invasive lens-cover check remains unanswered; no hardware obstruction is
+assumed. Next live test must verify gain ceiling, actual gain, sensor average,
+image quality and zero restoration before retaining any new default.
+
+## Gain headroom deployed: measurable improvement, brightness still unresolved
+
+Installed system SHA-256
+`a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38`;
+system-only flash completed in 77.996 seconds and Android boot was verified.
+The bridge and gain-headroom properties are enabled. Compatibility and diagnostic
+hashes match the preceding prepared components; sensor, HAL, media, CPP and Wi-Fi
+components remain unchanged. The preceding “not deployed” entry is historical.
+
+Private sweep evidence: `.work/gain-headroom-1788830187376`. Baseline preview
+luma ~17.4 increased to 32.6–33.3 with +12 compensation. At the positive snapshot,
+actual gain and ceiling both became `0x3ff` from `0x200`, and sensor average
+`56a1` rose from `07` to `0d`. All six target registers were sampled: positive
+`c0/a0/c0/98/ff/50`, negative `0c/0a/0c/0a/18/05`, restored zero
+`30/28/30/26/60/14`. Negative and zero requests restored ceiling/actual gain
+`0x200`; luma returned ~17.3–17.5. Integration `00/45/c0`, AEC `3503=00` and
+frame length `04/60` remained unchanged. Camera release took 2313 ms; zero was
+restored before closing and the clock was not reopened.
+
+This is about 1.9× measured luma, not calibrated +2 EV / 4× brightness. It shows
+the automatic gain path responds when given headroom. Visual inspection still
+shows a dark, noisy room, so the brightness issue remains open. Current lighting
+was not controlled against the user's older phone photo. No lens obstruction
+is established. This test did not revalidate saved JPEG/video, perceptual A/V
+sync, physical cold starts or fix intermittent blank starts. Current docs now
+separate this installed experiment from the earlier baseline and rejected tests.

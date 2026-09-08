@@ -1,0 +1,13 @@
+--- a/src/com/android/camera/VideoModule.java
++++ b/src/com/android/camera/VideoModule.java
+@@ -1419,3 +1419,10 @@
+         mProfile.duration = mMaxVideoDurationInMs;
++        if (SystemProperties.getBoolean("ro.mirror.camera.front", false)
++                && mProfile.videoFrameWidth == 1280 && mProfile.videoFrameHeight == 720
++                && mVideoEncoder == MediaRecorder.VideoEncoder.H264
++                && !isHFR && !isHSR && !mCaptureTimeLapse) {
++            mProfile.videoBitRate = Math.min(mProfile.videoBitRate, 4000000);
++            Log.i(TAG, "Mirror 720p recording bitrate=" + mProfile.videoBitRate);
++        }
+ 
+         // Set params individually for HFR case, as we do not want to encode audio

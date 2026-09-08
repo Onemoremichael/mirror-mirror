@@ -6,6 +6,8 @@ source_image="$repo_root/.work/mirror-android-build.ext4.img"
 camera_source="$repo_root/.work/quectel-sc20-camera"
 compat_patch="$repo_root/camera/quectel-ov5640-hy22-abi.patch"
 modes_patch="$repo_root/camera/quectel-ov5640-hy22-modes.patch"
+stock_modes_patch="$repo_root/camera/mirror-ov5640-stock-modes.patch"
+settle_probe_patch="$repo_root/camera/mirror-ov5640-settle-probe.patch"
 artifact_dir="$repo_root/artifacts/android-m-msm8916_64"
 camera_commit=ed0e50a102c7ee115c6999ba0a26ce50537c616e
 
@@ -17,7 +19,7 @@ fi
 if [[ ! -d "$camera_source/.git" ]]; then
   git clone https://github.com/copslock/Quectel_sc20_linux_sdk.git "$camera_source"
 fi
-for required_patch in "$compat_patch" "$modes_patch"; do
+for required_patch in "$compat_patch" "$modes_patch" "$stock_modes_patch" "$settle_probe_patch"; do
   if [[ ! -f "$required_patch" ]]; then
     echo "Missing HY22 camera patch: $required_patch" >&2
     exit 1
@@ -31,6 +33,8 @@ docker run --rm --platform linux/amd64 --privileged \
   -v "$camera_source:/camera:ro" \
   -v "$compat_patch:/hy22-abi.patch:ro" \
   -v "$modes_patch:/hy22-modes.patch:ro" \
+  -v "$stock_modes_patch:/stock-modes.patch:ro" \
+  -v "$settle_probe_patch:/settle-probe.patch:ro" \
   -v "$artifact_dir:/artifacts" \
   alleen/apq8016_bm bash -lc '
 set -e
@@ -68,6 +72,8 @@ cp "$sensors/includes/sensor_lib.h" /tmp/hy22-include/sensor_lib.h
 patch /tmp/hy22-include/sensor_lib.h < /hy22-abi.patch
 cp "$sensors/sensor_libs/ov5640/ov5640_lib.c" /tmp/ov5640_lib.c
 patch /tmp/ov5640_lib.c < /hy22-modes.patch
+patch /tmp/ov5640_lib.c < /stock-modes.patch
+patch /tmp/ov5640_lib.c < /settle-probe.patch
 # msm8916 uses the Qualcomm VFE 4.0 camera pipeline. The normal Android make
 # hierarchy supplies this define from media-controller/Android.mk; retain it in
 # the standalone build so the OV5640 configures a normal two-lane CSI PHY

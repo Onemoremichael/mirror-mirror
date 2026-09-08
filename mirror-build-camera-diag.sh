@@ -43,6 +43,10 @@ mkdir -p /tmp/mirror-camera-module
 cp /module/Makefile /module/mirror_camera_diag.c /tmp/mirror-camera-module/
 make -C "$kernel" O="$kernel_out" ARCH=arm64 CROSS_COMPILE="$cross" \
   M=/tmp/mirror-camera-module modules
+if "${cross}readelf" -r /tmp/mirror-camera-module/mirror_camera_diag.ko | grep -q "R_AARCH64_.*GOT"; then
+  echo "Stock kernel cannot load GOT relocations in this module" >&2
+  exit 1
+fi
 cp /tmp/mirror-camera-module/mirror_camera_diag.ko \
   /artifacts/mirror_camera_diag.ko
 modinfo /artifacts/mirror_camera_diag.ko

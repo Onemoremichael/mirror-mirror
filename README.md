@@ -5,8 +5,8 @@ lululemon Studio MIRROR Model One a useful second life.
 
 ## Current result
 
-The tested unit now boots a reconstructed Android 6.0.1 desktop in 1920×1080
-landscape while retaining its original signed bootloader, boot image, kernel,
+The tested unit now boots a reconstructed Android 6.0.1 desktop in 1080×1920
+portrait (native panel: 1920×1080) while retaining its original signed bootloader, boot image, kernel,
 recovery, and board-specific partitions. The recovered system has:
 
 - a normal Launcher3 home screen and full 5.1 GiB userdata filesystem;
@@ -15,6 +15,9 @@ recovery, and board-specific partitions. The recovered system has:
 - a local Mac/iPhone web remote with screenshot previews, tap, swipe, text, Android
   navigation, a directional pad, volume, wake/sleep, and app shortcuts;
 - working speakers, microphone, and Bluetooth;
+- one front camera with live preview, upright JPEG capture and tested 720p
+  software H.264/AAC recording; image brightness and startup reliability still
+  need work;
 - an optional local dashboard app that is not forced as the Android home app.
 
 The panel is output-only—it has no touch layer. The web remote now works through
@@ -33,11 +36,12 @@ in the Android remote. Preview the design on the Mac at `http://127.0.0.1:8766/`
 its separate visual remote is at `/remote`. Build/install instructions and the
 experimental app architecture are in [clock-app/README.md](clock-app/README.md).
 
-The OV5640 camera is detected, and its supported modes and two-lane CSI routing
-are configured. Preview is not yet verified usable: isolated tests receive
-continuous buffers at 1920×1080, but their color data is abnormal; other modes
-stall or fail. The exact remaining cause is unresolved. See
-[RECOVERY-STATUS.md](RECOVERY-STATUS.md) for exact evidence.
+The clock is optional and is not automatically restored after camera tests.
+For the complete camera breakdown—sensor compatibility, pixel-format repair,
+recording, orientation, diagnostics, tests and remaining limitations—start with
+[camera/README.md](camera/README.md). The dated experiments remain in
+[CAMERA-RECOVERY.md](CAMERA-RECOVERY.md); the authoritative device snapshot is
+[RECOVERY-STATUS.md](RECOVERY-STATUS.md).
 
 ## Use the remote
 
@@ -81,21 +85,30 @@ board drivers remain in place:
 ./mirror-build-camera-compat.sh
 ./mirror-patch-camera-cpp.sh
 ./mirror-build-camera-diag.sh
-./mirror-build-final-system.sh
+./mirror-build-snapcam.sh
+MIRROR_CAMERA_FRONT=1 MIRROR_VIDEO_RAW=1 \
+  MIRROR_REBUILD_CAMERA_HAL=1 MIRROR_REBUILD_STAGEFRIGHT=1 \
+  ./mirror-build-final-system.sh
 ```
 
 The final sparse image is ignored by Git at
 `artifacts/android-m-msm8916_64/system-mirror-final.img`. The latest local image
-includes experimental CSI diagnostics and **has not been flashed**. Its SHA-256 is:
+was flashed to `system` and boot-verified. Its checkpoint SHA-256 is:
 
 ```text
-eedf1f328e0fab49c98425e394a0882141564b9c581e665a05fd0e8c3ce8d249
+d4f5b63c05ce814a1049a3a3858b9c1a3eb0e12bba7f8178e7ae339014af308a
 ```
 
 `patches/android-m-mirror-revival.patch` records the owner-key, userdata,
 audio, Wi-Fi retry, and product-property source changes. Build artifacts,
 captures, credentials, and local source trees are deliberately excluded from
 Git.
+
+These scripts require the existing local Android build tree, vendor inputs,
+matching kernel build inputs and toolchains; this is not a clean-clone build.
+See the [camera build runbook](camera/README.md#build-and-test-runbook) before
+rebuilding. Building does not flash the device. Keep `MIRROR_CAMERA_FRONT=1`
+explicit: the builder's generic default is `0`.
 
 The optional dashboard is pinned to a known upstream revision and built with:
 

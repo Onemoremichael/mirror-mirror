@@ -1,158 +1,152 @@
-# Mirror recovery status — 2026-09-06
+# Mirror recovery status
 
-## Usable Android system
+Current checkpoint: September 8, 2026 device logs. Historical candidates belong
+in [CAMERA-RECOVERY.md](CAMERA-RECOVERY.md), not this current-state snapshot.
 
-The tested MIRROR boots Android 6.0.1 `msm8916_64-userdebug` to Launcher3 at
-1920×1080. The original signed bootloader, boot image, kernel, recovery, and
-board-specific partitions are preserved. The reconstructed `system` partition
-and a fresh Android-compatible `userdata` filesystem are the material changes.
+## Installed system
 
-Recovery baseline, with September 6 application/control updates:
+The tested board boots Android 6.0.1 `msm8916_64-userdebug` to Launcher3.
+Its signed bootloader, boot image, Linux kernel, recovery and board-specific
+partitions remain preserved. Reconstructed `system` and an Android-compatible
+`userdata` filesystem provide the usable installation.
 
-| Capability | Result |
+| Capability | Last verified result |
 | --- | --- |
 | Android boot | `sys.boot_completed=1` |
-| Display | Android desktop usable; Afterglow now renders in 1080×1920 portrait |
-| Userdata | 5.1 GiB total, 4.6 GiB free |
-| ADB control | USB previously verified; Wi-Fi `192.168.0.51:5555` authorized and in use |
-| Wi-Fi | `SETUP-A040`, `192.168.0.51`, driver status `ok` |
-| Phone/Mac remote | Screenshot preview and controls through Mac service on port 8765 |
-| Afterglow | `dev.mirror.clock` 0.1; live web clock and bundled fallback tested |
-| Dashboard | `dev.mirror.repurpose` 1.8.2; four-digit pairing; local API on port 8787 |
-| Bluetooth | Enabled; Android profiles loaded |
-| Audio | Speaker playback and built-in microphone recording verified |
-| Camera | OV5640 detected; isolated 1080p test receives buffers, but usable imagery/color remains unverified |
+| Display | Portrait 1080×1920 desktop; native panel 1920×1080; no touch layer |
+| Storage | Full 5.1 GiB userdata filesystem; 4.6 GiB free at the earlier storage check |
+| Control | Authorized USB ADB (`be9d0af`) and Wi-Fi ADB (`192.168.0.51:5555`) |
+| Wi-Fi | Automatic reconnection, working Internet and DNS |
+| Remote | Mac/iPhone browser controls and screenshot previews through Mac port 8765 |
+| Audio | Audible speaker playback and built-in microphone recording |
+| Bluetooth | Enabled and Android profiles loaded; not a claim that every peripheral was tested |
+| Camera | One FRONT/0 camera; upright live preview, JPEG and 720p software H.264/AAC video |
+| Camera limitations | Severe darkness, historical intermittent startup, hardware encoder and perceptual A/V sync unresolved |
+| Afterglow | Landscape/portrait and bundled offline fallback tested; ordinary optional app |
+| Dashboard | Regular app with four-digit pairing, not the Android launcher |
 
-## Latest checkpoint
+The clock is not automatically restored after tests. User preference is to open
+Android normally and choose apps through the remote. There are no physical
+front/back camera pairs: old BACK metadata was a software label.
 
-Afterglow was built, installed and visually verified on the Mirror in landscape
-and portrait. Portrait is now the remembered setting. The clock keeps a black
-background with sparse orbital animation, uses thin Android typography and
-displays America/New_York time. It is an ordinary app, not the default launcher.
+## Current image and camera checkpoint
 
-The Mac's `ux-lab` server serves the live design at port 8766. The app remembers
-its live page address and carries bundled assets for offline use. A deliberate
-HTTP failure correctly fell back to the bundled clock. Home, relaunch, the
-native app menu, Sleep and Wake were tested through the remote.
-
-Installed Afterglow APK SHA-256:
+Installed sparse `system-mirror-final.img` SHA-256:
 
 ```text
-56f4700dfd7c68f1bd9e49d03fdbfee1247f05adc21f6457361da46b966e9dc7
+d4f5b63c05ce814a1049a3a3858b9c1a3eb0e12bba7f8178e7ae339014af308a
 ```
 
-The latest prepared sparse system image contains experimental camera
-diagnostics and **has not been flashed**:
+It was flashed to `system` in 76.321 seconds and boot-verified. Its camera
+configuration is FRONT/0, default settle count 0x18, normal C2D (sampling wrapper
+disabled), quiet processing logs, and `debug.mirror.video_raw=1` loaded from
+`build.prop` after reboot. No manual recording-property setup is now required.
+
+Current Snapcam APK SHA-256:
 
 ```text
-eedf1f328e0fab49c98425e394a0882141564b9c581e665a05fd0e8c3ce8d249
+ba9c9c7a8da7122479ca30ca177ad0f49307796a78a8ed4dab4ba497429142da
 ```
 
-The older hash 2e8f2082… was an earlier recovery checkpoint, not the current
-prepared image. No firmware flash was needed for the clock work.
+Photo and video preview proportions and saved orientation were corrected for
+the sensor-less portrait installation. Latest ordinary-app video: 413 frames
+over 18.1235 seconds (~22.79 fps), H.264 at the Mirror-specific 4 Mbps 720p
+setting, with AAC audio. Full decode and upright visual inspection passed.
+This is not a claim of 30 fps or verified perceptual synchronization.
 
-## Durable control
+Three warm and three post-reboot probe opens each reached 300 frames, with first
+frames under one second and clean release. Past genuine startup failures remain
+unresolved; these six passes do not establish universal reliability or physical
+cold-start success. Wake plus keyguard dismissal is needed before measuring an
+app launch.
 
-The display has no touch layer. The current path is:
+The user's phone comparison shows the room is lit, while the Mirror image is
+much darker. Exposure compensation and brightness tests did not materially
+brighten it. Guarded live register reads show AEC enabled and gain at its
+configured ceiling, not necessarily its absolute limit. The installed exposure
+control path and possible optical attenuation still need investigation.
+
+See [camera/README.md](camera/README.md) for the full implementation breakdown,
+patch inventory, artifact hashes, failed approaches, evidence and build/test
+runbook. Camera experiments were paused for this documentation checkpoint.
+
+## Durable control and optional apps
 
 ```text
-iPhone or Mac browser → local web remote on Mac → authorized Wi-Fi ADB → MIRROR
+iPhone or Mac browser → remote service on Mac → authorized ADB → MIRROR
 ```
 
-USB serial `be9d0af` remains a fallback. The earlier TCP authorization problem
-is no longer present in the current session.
+The Mac service starts at login and keeps the Mac awake while on external power.
+It binds port 8765 on the trusted local network and opens without an access key.
+Do not expose this unauthenticated control service to the Internet or an
+untrusted network. Addresses are the observed setup, not guaranteed static IPs.
 
-The Mac service starts at login, binds port 8765 on the trusted local network
-and keeps the Mac awake while on external power. It opens without an account
-or access key. The controls include Back/Home/Recent, D-pad/OK, tap/swipe/text,
-volume, Sleep/Wake and app shortcuts, now including Afterglow and App menu.
+Controls include Back/Home/Recent, D-pad/OK, tap/swipe/text, volume, Sleep/Wake
+and app shortcuts. Previews are snapshots, not live video. A complex screenshot
+took about 13 seconds over Wi-Fi; the server allows 30 seconds and shares
+concurrent captures. Wake dismisses a credential-free keyguard only when it is
+showing. See [REMOTE-CONTROL.md](REMOTE-CONTROL.md).
 
-Screen previews are snapshots, not video. A complex roughly 4 MB screenshot
-took about 13 seconds over Wi-Fi, exceeding the old eight-second timeout.
-Captures now allow 30 seconds and concurrent requests share a single capture.
-Wake sends the keyguard-dismiss menu key only if the lock screen is actually
-showing, so waking Afterglow does not accidentally open its menu.
+Afterglow (`dev.mirror.clock` 0.1) was visually tested in both orientations;
+portrait is remembered. It uses the Mac's port-8766 design server and bundled
+assets when the live page fails. Home, relaunch, app menu, Sleep/Wake and the
+offline fallback were tested. Installed clock APK checkpoint:
+`56f4700dfd7c68f1bd9e49d03fdbfee1247f05adc21f6457361da46b966e9dc7`.
 
-## Wi-Fi, audio, and storage
+The optional dashboard (`dev.mirror.repurpose` 1.8.2) uses four-digit pairing
+and its local API on port 8787. It is not the default launcher. Its pairing is
+separate from the no-login Android remote.
 
-The preserved stock kernel requires a matching `pronto_wlan` module with this
-release string:
+## Wi-Fi, audio and storage recovery
+
+The matching `pronto_wlan` module targets:
 
 ```text
 3.10.49-perf-gf46dad5260f SMP preempt mod_unload modversions aarch64
 ```
 
-`mirror-build-running-kernel-wifi.sh` rebuilds it. The module SHA-256 is:
-
-```text
-3209948e50a290ede0939586762da074efcd7fbc55f325c84bc0fa680eba40fb
-```
-
+Built by `mirror-build-running-kernel-wifi.sh`, its SHA-256 is
+`3209948e50a290ede0939586762da074efcd7fbc55f325c84bc0fa680eba40fb`.
 The Android Wi-Fi service retries driver loading for up to one minute because
-the device node appears several seconds after the framework starts. The
-MIRROR now reconnects automatically after cold boot and has working Internet
-and DNS.
+the device node appears after framework startup. Automatic cold-boot
+reconnection, Internet and DNS were verified.
 
-Audio uses the primary MI2S receive path, both headphone outputs, and the
-external-speaker gate. Full-volume speaker playback was audible, and a
-three-second recording showed live input from the built-in microphone.
+Audio uses primary MI2S receive, both headphone outputs and the external-speaker
+gate. Speaker playback was audible; a three-second microphone recording
+contained live input.
 
 The physical userdata partition is 5,583,458,304 bytes. The successful repair
-used the verified Android-6-compatible sparse image at:
+used the local, ignored Android-6-compatible sparse image
+`captures/adb-userdata-20260904/userdata-adb-raw-chunks.sparse`.
+It was sent whole: the device reports a 256 MiB maximum download and this file
+is approximately 155 MiB. These are checkpoint-specific observations, not
+instructions to erase a currently working installation.
 
-```text
-captures/adb-userdata-20260904/userdata-adb-raw-chunks.sparse
-```
+## Flash and diagnostic boundaries
 
-It was sent whole because the device reports a 256 MiB maximum download and
-the sparse file is approximately 155 MiB. Do not use the host's current
-`fastboot format:ext4 userdata`; its filesystem features produced Android's
-`Encryption unsuccessful` screen. Do not add `fastboot -S 128M`; splitting
-this custom sparse image caused the later chunk to be rejected.
-
-## Camera boundary
-
-There is one physical front camera. The replacement Android sensor library
-labels it BACK, but Android enumerates only one device.
-
-OV5640 discovery and configuration work. Later experiments corrected an
-88-byte/104-byte ISP ioctl mismatch, adjusted the CPP initial-AEC failure path,
-selected the active CSIPHY0/CSID0 route and built the sensor library with
-VFE_40 (combo_mode=0). No usable preview frames arrive; the stream still times
-out. Significant PHY interrupt activity does not yet establish correct packet
-decoding or the exact remaining cause.
-
-The installed sensor library was read back on September 6 with SHA-256:
-
-```text
-e748793df9a7be7576bc94077012fa2ff8afa94564f8bb64925dd6cf6c20048a
-```
-
-A diagnostic module to expose CSI registers was built into the prepared image,
-but that image remains unflashed and `/proc/mirror_camera_diag` is absent on
-the running unit. Camera work is paused. See
-[CAMERA-RECOVERY.md](CAMERA-RECOVERY.md) for the corrected route, evidence,
-build order and next diagnostic step.
-
-## Flash history and boundaries
-
-Early targeted experiments erased and reformatted only `userdata` and `cache`.
-The modern formatter's ext4 feature set was incompatible, and provisioning an
-ADB public key alone did not authorize the stock daemon. A reconstructed
-Android system was then built and flashed to `system`; the full-size compatible
-userdata image restored normal `/data` operation.
-
-No bootloader, boot, recovery, modem, trust, partition-table, or board-specific
-firmware partition was replaced. All successful writes were scoped to the
-verified fastboot serial `be9d0af`.
+- Early targeted work erased/reformatted only userdata and cache; reconstructed
+  Android was subsequently written to system.
+- Modern macOS `fastboot format:ext4 userdata` made filesystem features this
+  Android could not mount, causing “Encryption unsuccessful.” Do not repeat it.
+- Splitting the custom sparse userdata image with `fastboot -S 128M` caused a
+  later chunk rejection; the successful repair sent that image whole.
+- No bootloader, boot, recovery, modem, trust, GPT or board-specific firmware
+  partition was replaced. Writes were scoped to verified serial `be9d0af`.
+- Historical empty boot-dump files are not valid backups. Do not infer that a
+  complete restorable factory image exists.
+- Camera builders prepare images; they do not flash automatically. Preserve
+  `MIRROR_CAMERA_FRONT=1` explicitly when rebuilding the current configuration.
+- The CSI MMIO diagnostic can hang the board when idle/off/in an error state.
+  Do not treat every read-only diagnostic as safe in every power state.
+- Camera photos, room images, raw frames, logs, keys, vendor binaries and build
+  images remain in ignored local storage, not in the public repository.
 
 ## Hardware facts
 
-- Custom board: `MIR63A0-00-P1 / PCA#500240 RevP21`.
-- SoC family: Qualcomm APQ8016/MSM8916.
-- No microSD slot exists on this board.
-- Wi-Fi antenna is connected and handles both 2.4 and 5 GHz.
-- `VOL-` during cold power-on enters fastboot; the panel may remain blank.
-- `VOL+` enters the signed recovery/update UI.
-- UART is exposed at the three-pin `GND TX RX` header and should be treated as
-  1.8 V logic.
+- Board: `MIR63A0-00-P1 / PCA#500240 RevP21`, Qualcomm APQ8016/MSM8916 family.
+- No microSD slot; the display is output-only.
+- Connected Molex `146153` dual-band Wi-Fi antenna.
+- PCB `VOL-` during cold power-on enters fastboot; a blank panel can be normal.
+- PCB `VOL+` enters signed recovery/update UI.
+- Three-pin UART header: GND/TX/RX; treat as 1.8 V logic and never connect adapter
+  VCC. UART is a diagnostic fallback, not the normal phone/Mac control path.

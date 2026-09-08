@@ -6,7 +6,8 @@ on the same Wi-Fi.
 
 ## Install
 
-Keep the MIRROR's internal USB data cable connected to the Mac, then run:
+For initial setup, keep the MIRROR's USB data cable connected to the Mac
+(an already authorized Wi-Fi ADB connection also works), then run:
 
 ```sh
 brew install android-platform-tools scrcpy node
@@ -33,6 +34,9 @@ shown under its QR and remembers paired phone browsers.
 ## Controls
 
 - Tap the live image to click Android controls.
+- Camera control also uses these simulated taps and Android navigation; the
+  panel itself never needs touch. Close one camera app before opening another.
+  See the [camera guide](camera/README.md) for current capabilities and limits.
 - Drag across the image to swipe.
 - Use **Back**, **Home**, and **Recent** from the sticky phone navigation bar.
 - Use the D-pad and **OK** for interfaces that respond better to keyboard-like

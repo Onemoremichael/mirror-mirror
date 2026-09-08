@@ -31,6 +31,18 @@ mkdir -p "$artifact_dir"
 
 docker run --rm --platform linux/amd64 --privileged \
   -e MIRROR_REPACK_ONLY="${MIRROR_REPACK_ONLY:-0}" \
+  -e MIRROR_CAMERA_VERBOSE="${MIRROR_CAMERA_VERBOSE:-0}" \
+  -e MIRROR_C2D_PROBE="${MIRROR_C2D_PROBE:-0}" \
+  -e MIRROR_FIRMWARE_AUDIT="${MIRROR_FIRMWARE_AUDIT:-0}" \
+  -e MIRROR_REBUILD_STAGEFRIGHT="${MIRROR_REBUILD_STAGEFRIGHT:-0}" \
+  -e MIRROR_REBUILD_CAMERA_HAL="${MIRROR_REBUILD_CAMERA_HAL:-0}" \
+  -e MIRROR_CAMERA_FRONT="${MIRROR_CAMERA_FRONT:-0}" \
+  -e MIRROR_VIDEO_RAW="${MIRROR_VIDEO_RAW:-1}" \
+  -v "$repo_root/camera/mirror-camera-metadata.patch:/inputs/camera-metadata.patch:ro" \
+  -v "$repo_root/camera/mirror-camera-mount-correction.patch:/inputs/camera-mount-correction.patch:ro" \
+  -v "$repo_root/camera/mirror-camera-raw-video.patch:/inputs/raw-video.patch:ro" \
+  -v "$repo_root/camera/mirror-codec-video-pack.patch:/inputs/codec-video-pack.patch:ro" \
+  -v "$repo_root/camera/mirror-video-pack.h:/inputs/mirror-video-pack.h:ro" \
   -v "$build_image:/build.img" \
   -v "$wifi_source:/inputs/WifiStateMachine.java:ro" \
   -v "$product_properties:/inputs/system.prop:ro" \
@@ -44,7 +56,7 @@ docker run --rm --platform linux/amd64 --privileged \
   -v "$post_boot_source:/inputs/init.qcom.post_boot.sh:ro" \
   -v "$artifact_dir:/artifacts" \
   alleen/apq8016_bm bash -lc '
-set -e
+set -eo pipefail
 mkdir -p /mnt/build
 mount -o loop /build.img /mnt/build
 cleanup() {
@@ -69,6 +81,31 @@ export USE_CCACHE=1
 export CCACHE_DIR=/mnt/build/.ccache
 source build/envsetup.sh >/dev/null
 lunch msm8916_64-userdebug >/dev/null
+
+if [ "$MIRROR_REBUILD_STAGEFRIGHT" = 1 ]; then
+  camera_source=frameworks/av/media/libstagefright/CameraSource.cpp
+  if ! grep -q "debug.mirror.video_raw" "$camera_source"; then
+    patch "$camera_source" < /inputs/raw-video.patch
+  fi
+  codec_source=frameworks/av/media/libstagefright/MediaCodecSource.cpp
+  if ! grep -q "mirror_pack_venus_nv12" "$codec_source"; then
+    patch "$codec_source" < /inputs/codec-video-pack.patch
+  fi
+  install -m 0644 /inputs/mirror-video-pack.h frameworks/av/media/libstagefright/mirror-video-pack.h
+  make -j4 libstagefright libstagefright_32 2>&1 | tee /artifacts/mirror-stagefright-build.log
+fi
+
+# Camera HAL is a 32-bit-only secondary-architecture module on this product.
+if [ "$MIRROR_REBUILD_CAMERA_HAL" = 1 ]; then
+  camera_factory=hardware/qcom/camera/QCamera2/HAL/QCamera2Factory.cpp
+  if ! grep -q "ro.mirror.camera.front" "$camera_factory"; then
+    patch "$camera_factory" < /inputs/camera-metadata.patch
+  fi
+  if ! grep -q "Mirror camera metadata: front, mount 0" "$camera_factory"; then
+    patch "$camera_factory" < /inputs/camera-mount-correction.patch
+  fi
+  make -j4 camera.msm8916_32 2>&1 | tee /artifacts/mirror-camera-hal-build.log
+fi
 
 # Rebuild the modified framework service and regenerate the product image so
 # the product property is folded into build.prop. MIRROR_REPACK_ONLY=1 is for
@@ -107,6 +144,10 @@ for camera_module in \
   install -m 0755 "$camera_prebuilts/$camera_module" \
     "out/target/product/msm8916_64/system/vendor/lib/$camera_module"
 done
+if [ "$MIRROR_C2D_PROBE" = 1 ]; then
+  install -m 0755 /artifacts/libMD2.so out/target/product/msm8916_64/system/vendor/lib/libMD2.so
+  install -m 0755 /artifacts/libmmcamera2_c2d_module-probe.so out/target/product/msm8916_64/system/vendor/lib/libmmcamera2_c2d_module.so
+fi
 # This YUV sensor performs AEC/AWB internally and has no separate Qualcomm
 # statistics producer. Use the narrowly patched CPP module that treats its
 # missing initial AEC update as non-fatal while retaining the normal path.
@@ -128,6 +169,31 @@ if [ -f /system/lib/modules/mirror_camera_diag.ko ]; then
 fi
 POST_BOOT_EOF
 fi
+if [ "$MIRROR_FIRMWARE_AUDIT" = 1 ]; then
+  cat >> "$post_boot" <<"FIRMWARE_AUDIT_EOF"
+
+# Read-only inventory of the preserved video firmware, not other partitions.
+for mirror_venus_part in venus.mdt venus.b00 venus.b01 venus.b02 venus.b03 venus.b04; do
+    log -t MirrorFirmware "$(ls -l /firmware/image/$mirror_venus_part 2>&1)"
+    log -t MirrorFirmware "$(md5sum /firmware/image/$mirror_venus_part 2>&1)"
+done
+FIRMWARE_AUDIT_EOF
+fi
+if [ "$MIRROR_CAMERA_VERBOSE" = 1 ]; then
+  # qti_init_shell cannot set camera_prop under the preserved SELinux policy.
+  # Init loads build.prop itself, before the camera service starts.
+  sed -i "/^persist.camera.pproc.debug.mask=/d" out/target/product/msm8916_64/system/build.prop
+  printf "\npersist.camera.pproc.debug.mask=805306375\n" >> out/target/product/msm8916_64/system/build.prop
+else
+  sed -i "/^persist.camera.pproc.debug.mask=/d" out/target/product/msm8916_64/system/build.prop
+fi
+sed -i "/^ro.mirror.camera.front=/d" out/target/product/msm8916_64/system/build.prop
+printf "\nro.mirror.camera.front=%s\n" "$MIRROR_CAMERA_FRONT" >> out/target/product/msm8916_64/system/build.prop
+case "$MIRROR_VIDEO_RAW" in 0|1) ;; *) echo "MIRROR_VIDEO_RAW must be 0 or 1" >&2; exit 1 ;; esac
+# Persist the tested raw-buffer path across reboots; shell can still override
+# this debug property for hardware-encoder investigation without reflashing.
+sed -i "/^debug.mirror.video_raw=/d" out/target/product/msm8916_64/system/build.prop
+printf "\ndebug.mirror.video_raw=%s\n" "$MIRROR_VIDEO_RAW" >> out/target/product/msm8916_64/system/build.prop
 make -j4 snod 2>&1 | tee -a /artifacts/mirror-final-system-build.log
 
 cp out/target/product/msm8916_64/system.img /artifacts/system-mirror-final.img
@@ -139,6 +205,15 @@ out/host/linux-x86/bin/simg2img /artifacts/system-mirror-final.img "$raw"
 mkdir -p "$inspect"
 mount -o loop,ro "$raw" "$inspect"
 grep -qx "service.adb.tcp.port=5555" "$inspect/build.prop"
+grep -qx "ro.mirror.camera.front=$MIRROR_CAMERA_FRONT" "$inspect/build.prop"
+grep -qx "debug.mirror.video_raw=$MIRROR_VIDEO_RAW" "$inspect/build.prop"
+if [ "$MIRROR_CAMERA_FRONT" = 1 ]; then
+  grep -a -q "Mirror camera metadata: front, mount 0" "$inspect/lib/hw/camera.msm8916.so"
+  sha256sum "$inspect/lib/hw/camera.msm8916.so"
+fi
+if [ "$MIRROR_CAMERA_VERBOSE" = 1 ]; then
+  grep -qx "persist.camera.pproc.debug.mask=805306375" "$inspect/build.prop"
+fi
 test -s "$inspect/framework/wifi-service.jar"
 test -s "$inspect/vendor/lib/libmmcamera_ov5640.so"
 test -s "$inspect/vendor/lib/libmmcamera_mirror_haf.so"
@@ -158,6 +233,17 @@ for camera_module in \
 done
 test -s "$inspect/lib/modules/pronto/pronto_wlan.ko"
 test -s "$inspect/lib/modules/mirror_camera_diag.ko"
+if [ "$MIRROR_REBUILD_STAGEFRIGHT" = 1 ] || [ "$MIRROR_VIDEO_RAW" = 1 ]; then
+  for mirror_media_arch in lib lib64; do
+    grep -a -q "debug.mirror.video_raw" "$inspect/$mirror_media_arch/libstagefright.so"
+    grep -a -q "Mirror recording: refusing oversized input" "$inspect/$mirror_media_arch/libstagefright.so"
+    sha256sum "$inspect/$mirror_media_arch/libstagefright.so"
+  done
+fi
+if [ "$MIRROR_C2D_PROBE" = 1 ]; then
+  cmp "$inspect/vendor/lib/libMD2.so" /artifacts/libMD2.so
+  cmp "$inspect/vendor/lib/libmmcamera2_c2d_module.so" /artifacts/libmmcamera2_c2d_module-probe.so
+fi
 sha256sum "$inspect/vendor/lib/libmmcamera_ov5640.so" /inputs/libmmcamera_ov5640.so
 sha256sum "$inspect/vendor/lib/libmmcamera2_cpp_module.so" /inputs/libmmcamera2_cpp_module.so
 sha256sum "$inspect/lib/modules/pronto/pronto_wlan.ko" /inputs/pronto_wlan-stock-kernel.ko

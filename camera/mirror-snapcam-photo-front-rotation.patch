@@ -1,0 +1,9 @@
+--- a/src/com/android/camera/PhotoModule.java
++++ b/src/com/android/camera/PhotoModule.java
+@@ -3298,2 +3298,4 @@
+-            int rotation = CameraUtil.getDisplayOrientation(
+-                    CameraUtil.getDisplayRotation(mActivity), mCameraId);
++            // Front preview is mirrored; saved JPEG is not. Undo preview's
++            // mirror compensation to obtain the JPEG rotation convention.
++            int rotation = (360 - CameraUtil.getDisplayOrientation(
++                    CameraUtil.getDisplayRotation(mActivity), mCameraId)) % 360;

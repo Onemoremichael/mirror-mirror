@@ -15,6 +15,10 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <android/log.h>
+#include <errno.h>
+#include <stddef.h>
+#include <sys/system_properties.h>
+#include "mirror-exposure-plan.h"
 
 /* This old NDK's unistd.h also declares ioctl with an incompatible signed
  * request type. Declare readlink directly to preserve the existing hook ABI. */
@@ -122,6 +126,92 @@ typedef char mirror_new_input_cfg_size_must_be_104[
 
 typedef int (*mirror_ioctl_fn)(int, unsigned long, ...);
 
+/* Exact 32-bit kernel compat layout, corroborated by config32 disassembly. */
+struct mirror_i2c_entry { uint16_t address, value; uint32_t delay; };
+struct mirror_i2c_setting {
+  uint32_t entries;
+  uint16_t count, padding;
+  uint32_t address_type, data_type;
+  uint16_t delay, padding2;
+  uint32_t batch;
+};
+typedef char mirror_i2c_size_check[sizeof(struct mirror_i2c_setting) == 24 ? 1 : -1];
+typedef char mirror_i2c_entry_check[sizeof(struct mirror_i2c_entry) == 8 ? 1 : -1];
+typedef char mirror_pointer_check[sizeof(void *) == 4 ? 1 : -1];
+typedef char mirror_i2c_offsets_check[
+  offsetof(struct mirror_i2c_setting, count) == 4 &&
+  offsetof(struct mirror_i2c_setting, address_type) == 8 &&
+  offsetof(struct mirror_i2c_setting, data_type) == 12 &&
+  offsetof(struct mirror_i2c_setting, delay) == 16 &&
+  offsetof(struct mirror_i2c_setting, batch) == 20 ? 1 : -1];
+
+static int mirror_is_ov5640_fd(int fd)
+{
+  char link[64], path[128], sysfs[160], name[32];
+  const char *number;
+  ssize_t length;
+  FILE *file;
+  snprintf(link, sizeof(link), "/proc/self/fd/%d", fd);
+  length = readlink(link, path, sizeof(path) - 1);
+  if (length <= 0 || length >= (ssize_t)sizeof(path) - 1) return 0;
+  path[length] = 0;
+  if (strncmp(path, "/dev/v4l-subdev", 15)) return 0;
+  number = path + 15;
+  if (!*number || strspn(number, "0123456789") != strlen(number)) return 0;
+  snprintf(sysfs, sizeof(sysfs), "/sys/class/video4linux/v4l-subdev%s/name", number);
+  file = fopen(sysfs, "r");
+  if (!file) return 0;
+  name[0] = 0;
+  if (!fgets(name, sizeof(name), file)) name[0] = 0;
+  fclose(file);
+  return !strcmp(name, "ov5640\n") || !strcmp(name, "ov5640");
+}
+
+static int mirror_exposure_write(mirror_ioctl_fn call, int fd, int steps)
+{
+  struct mirror_exposure_register plan[6];
+  struct mirror_i2c_entry entries[8];
+  struct mirror_i2c_setting setting;
+  unsigned char cfg[144];
+  uint32_t command = 2, pointer;
+  unsigned i;
+  char headroom[PROP_VALUE_MAX] = {0};
+  int result, saved_errno;
+  if (!mirror_exposure_plan(steps, plan)) { errno = EINVAL; return -1; }
+  memset(entries, 0, sizeof(entries));
+  memset(&setting, 0, sizeof(setting));
+  memset(cfg, 0, sizeof(cfg));
+  for (i = 0; i < 6; ++i) {
+    entries[i].address = plan[i].address;
+    entries[i].value = plan[i].value;
+  }
+  setting.entries = (uint32_t)(uintptr_t)entries;
+  setting.count = 6;
+  /* Opt-in experiment: allow the documented 10-bit AGC ceiling only during
+   * positive compensation. Zero/negative requests restore this unit's 0x200
+   * stock limit. AGC remains automatic; no gain or timing is forced. */
+  __system_property_get("debug.mirror.gain_headroom", headroom);
+  if (!strcmp(headroom, "1")) {
+    unsigned ceiling = steps > 0 ? 0x3ff : 0x200;
+    entries[6].address = 0x3a18;
+    entries[6].value = ceiling >> 8;
+    entries[7].address = 0x3a19;
+    entries[7].value = ceiling & 255;
+    setting.count = 8;
+  }
+  setting.address_type = 2; /* word register address */
+  setting.data_type = 1; /* byte value */
+  pointer = (uint32_t)(uintptr_t)&setting;
+  memcpy(cfg, &command, sizeof(command));
+  memcpy(cfg + 4, &pointer, sizeof(pointer));
+  result = call(fd, 0xc09056c1UL, cfg);
+  saved_errno = errno;
+  __android_log_print(ANDROID_LOG_INFO, "MirrorExposure",
+    "OV5640 target steps=%d result=%d errno=%d", steps, result, result < 0 ? saved_errno : 0);
+  errno = saved_errno;
+  return result;
+}
+
 /* Bounded ABI evidence: configuration payloads only, never frame contents. */
 static void mirror_trace_config(int fd, unsigned long request, const void *argument)
 {
@@ -199,6 +289,23 @@ int ioctl(int fd, unsigned long request, ...)
     return -1;
 
   mirror_trace_config(fd, request, argument);
+
+  if (request == 0xc09056c1UL && argument) {
+    uint32_t command;
+    char enabled[PROP_VALUE_MAX] = {0};
+    memcpy(&command, argument, sizeof(command));
+    if (command == 18) {
+      __system_property_get("debug.mirror.exposure_bridge", enabled);
+      if (!strcmp(enabled, "1") && mirror_is_ov5640_fd(fd)) {
+        uint32_t pointer;
+        int steps;
+        memcpy(&pointer, (const unsigned char *)argument + 4, sizeof(pointer));
+        if (!pointer) { errno = EINVAL; return -1; }
+        memcpy(&steps, (const void *)(uintptr_t)pointer, sizeof(steps));
+        return mirror_exposure_write(real_ioctl, fd, steps);
+      }
+    }
+  }
 
   if (request == MIRROR_ISP_INPUT_CFG_OLD && argument) {
     const struct mirror_vfe_input_cfg_old *old_cfg =

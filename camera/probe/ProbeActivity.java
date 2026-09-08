@@ -205,7 +205,8 @@ public class ProbeActivity extends Activity implements SurfaceHolder.Callback {
             camera.setPreviewDisplay(holder);
             camera.setPreviewCallback((data, c) -> {
                 frames++;
-                if (frames == 1 || frames == 10 || frames == 60 || frames % 300 == 0) {
+                if (frames == 1 || frames == 10 || frames == 60 || frames % 300 == 0
+                        || (getIntent().getBooleanExtra("exposureSweep", false) && frames % 60 == 0)) {
                     int ymin=255,ymax=0,uvmin=255,uvmax=0; long sum=0;
                     for (int i=0;i<data.length;i++) { int v=data[i]&255; if(i<width*height){ymin=Math.min(ymin,v);ymax=Math.max(ymax,v);sum+=v;}else{uvmin=Math.min(uvmin,v);uvmax=Math.max(uvmax,v);} }
                     note("FRAME " + frames + " ms=" + (System.currentTimeMillis()-started) + " bytes=" + data.length + " Y="+ymin+".."+ymax+" avg="+(sum/(double)(width*height))+" UV="+uvmin+".."+uvmax);
@@ -214,6 +215,31 @@ public class ProbeActivity extends Activity implements SurfaceHolder.Callback {
             });
             started = System.currentTimeMillis(); camera.startPreview(); note("PREVIEW_STARTED " + width + "x" + height);
             handler.postDelayed(() -> note("CHECKPOINT 15s frames="+frames), 15000);
+            // Distinguish initialization-time parameter loss from live control.
+            if (getIntent().getBooleanExtra("exposureSweep", false)) {
+                final int[] delays = {5000, 12000, 19000};
+                final int[] steps = {12, -12, 0};
+                for (int i = 0; i < steps.length; i++) {
+                    final int step = steps[i];
+                    handler.postDelayed(() -> {
+                        if (camera == null) return;
+                        if (frames < 60) {
+                            note("LIVE_EXPOSURE_SKIPPED insufficient preview frames=" + frames);
+                            return;
+                        }
+                        try {
+                            Camera.Parameters live = camera.getParameters();
+                            if (step < live.getMinExposureCompensation()
+                                    || step > live.getMaxExposureCompensation())
+                                throw new IllegalArgumentException("Unsupported sweep step");
+                            live.setExposureCompensation(step);
+                            camera.setParameters(live);
+                            note("LIVE_EXPOSURE frames=" + frames + " requested=" + step
+                                + " accepted=" + camera.getParameters().getExposureCompensation());
+                        } catch (Exception e) { note("LIVE_EXPOSURE_ERROR " + e); }
+                    }, delays[i]);
+                }
+            }
             if (getIntent().getBooleanExtra("video", false)) handler.postDelayed(() -> {
                 if (camera == null || frames < 5) { note("VIDEO_NOT_READY"); return; }
                 try {

@@ -87,6 +87,7 @@ board drivers remain in place:
 ./mirror-build-camera-diag.sh
 ./mirror-build-snapcam.sh
 MIRROR_CAMERA_FRONT=1 MIRROR_VIDEO_RAW=1 \
+  MIRROR_EXPOSURE_BRIDGE=1 MIRROR_GAIN_HEADROOM=1 \
   MIRROR_REBUILD_CAMERA_HAL=1 MIRROR_REBUILD_STAGEFRIGHT=1 \
   ./mirror-build-final-system.sh
 ```
@@ -96,7 +97,7 @@ The final sparse image is ignored by Git at
 was flashed to `system` and boot-verified. Its checkpoint SHA-256 is:
 
 ```text
-d4f5b63c05ce814a1049a3a3858b9c1a3eb0e12bba7f8178e7ae339014af308a
+a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38
 ```
 
 `patches/android-m-mirror-revival.patch` records the owner-key, userdata,
@@ -109,6 +110,13 @@ matching kernel build inputs and toolchains; this is not a clean-clone build.
 See the [camera build runbook](camera/README.md#build-and-test-runbook) before
 rebuilding. Building does not flash the device. Keep `MIRROR_CAMERA_FRONT=1`
 explicit: the builder's generic default is `0`.
+
+The two exposure flags also default to `0`; the example retains the current
+experimental bridge and gain-headroom path. It repairs an ignored stock control
+and yields about 1.9× preview brightness at positive compensation, but the image
+is still dark/noisy. Zero compensation restores stock targets and gain ceiling.
+See the camera guide for measurements and remaining tests—not a claim of full
+camera recovery.
 
 The optional dashboard is pinned to a known upstream revision and built with:
 

@@ -5,6 +5,12 @@ in [CAMERA-RECOVERY.md](CAMERA-RECOVERY.md), not this current-state snapshot.
 
 ## Installed system
 
+The current image enables the narrowly scoped exposure bridge and experimental
+gain headroom. The stock exposure command was a successful no-op; live sensor
+target changes now work. Positive compensation raises gain and measured preview
+brightness about 1.9×, but severe darkness/noise remains. Historical diagnostic
+and target-only images are recorded in the lab log, not installed concurrently.
+
 The tested board boots Android 6.0.1 `msm8916_64-userdebug` to Launcher3.
 Its signed bootloader, boot image, Linux kernel, recovery and board-specific
 partitions remain preserved. Reconstructed `system` and an Android-compatible
@@ -34,13 +40,16 @@ front/back camera pairs: old BACK metadata was a software label.
 Installed sparse `system-mirror-final.img` SHA-256:
 
 ```text
-d4f5b63c05ce814a1049a3a3858b9c1a3eb0e12bba7f8178e7ae339014af308a
+a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38
 ```
 
-It was flashed to `system` in 76.321 seconds and boot-verified. Its camera
+It was flashed to `system` in 77.996 seconds and boot-verified. Its camera
 configuration is FRONT/0, default settle count 0x18, normal C2D (sampling wrapper
 disabled), quiet processing logs, and `debug.mirror.video_raw=1` loaded from
-`build.prop` after reboot. No manual recording-property setup is now required.
+`build.prop` after reboot. `debug.mirror.exposure_bridge=1` and
+`debug.mirror.gain_headroom=1` are enabled; builders default both to 0, so retain
+them explicitly to reproduce this experimental configuration. No manual
+recording-property setup is now required.
 
 Current Snapcam APK SHA-256:
 
@@ -60,11 +69,13 @@ unresolved; these six passes do not establish universal reliability or physical
 cold-start success. Wake plus keyguard dismissal is needed before measuring an
 app launch.
 
-The user's phone comparison shows the room is lit, while the Mirror image is
-much darker. Exposure compensation and brightness tests did not materially
-brighten it. Guarded live register reads show AEC enabled and gain at its
-configured ceiling, not necessarily its absolute limit. The installed exposure
-control path and possible optical attenuation still need investigation.
+The latest sweep measured baseline luma ~17.4 and positive-compensation luma
+32.6–33.3. Gain/ceiling changed from `0x200` to `0x3ff`; the sensor's own average
+rose from `07` to `0d`. Integration and frame length stayed unchanged. All six
+targets and the stock gain ceiling restored at zero; release took 2.313 seconds.
+The image remains dark/noisy. A same-light phone comparison and lens-cover check
+are unverified; the older lit-room photo is not a current lighting measurement.
+Saved media and full startup regression have not been repeated on this image.
 
 See [camera/README.md](camera/README.md) for the full implementation breakdown,
 patch inventory, artifact hashes, failed approaches, evidence and build/test

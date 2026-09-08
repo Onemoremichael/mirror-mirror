@@ -7,11 +7,17 @@ MIRROR, not every hardware revision or Android camera app.
 
 ## What works, and what does not
 
+The installed gain-headroom checkpoint is
+`a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38`.
+The exposure bridge repairs a stock no-op control. Optional gain headroom now
+produces about 1.9× measured brightness at positive compensation, but the image
+remains dark and noisy. This is progress, **not a completed brightness fix**.
+
 | Area | Verified result | Remaining boundary |
 | --- | --- | --- |
 | Hardware | One fixed-focus OV5640 front camera | No second/back camera |
 | Preview | Coherent 720p and 1080p diagnostic frames; upright Snapcam photo/video preview | Image is much too dark; historical intermittent blank/invalid starts |
-| Photos | Upright portrait JPEG saved and fully decoded | Exposure controls have not produced the expected brightness change |
+| Photos | Upright portrait JPEG saved and fully decoded | Latest exposure improvement tested in preview, not yet revalidated in saved JPEG/video |
 | Video | Ordinary Snapcam 720p H.264 with AAC, upright and fully decoded | Software encoding, about 22.79 fps in the latest clip; not a guaranteed 30 fps |
 | Rotation | FRONT/0 metadata, portrait desktop; correct preview proportions | Other third-party apps have not been exhaustively tested |
 | Reboot | Raw recording property loads automatically; three post-reboot probe opens passed | Not proof of a physical cold-power-on recovery or universal startup reliability |
@@ -171,7 +177,8 @@ The earlier action without `.action.` did not select video mode.
 The user reports a very dark image. App exposure compensation at +2 EV (12
 steps) and brightness 6 did not materially increase measured pixel brightness:
 representative mean-luma comparisons were 23.93→23.68 and 18.44→18.47. We did
-not persist ineffective brightening defaults or add sensor-register writes.
+not persist those ineffective app defaults. Later controlled register changes
+are described below; the initial no-write investigation is historical.
 
 The read-only exposure diagnostic initially refused even live reads because the
 custom sensor callbacks leave the generic `sensor_state` at zero. It now checks
@@ -192,9 +199,10 @@ refuses I²C reads; live preview returned sensor ID `5640` and:
 The configured ceiling is **not** proof of the sensor's absolute maximum or
 proof of hardware failure. Kernel command 25 is `CFG_SET_STREAM_TYPE`
 (preview 0 / snapshot 1 / video 2), not initialization parameters. Reference
-source forwards exposure via command 18, but the exact installed-binary path
-has not yet been verified. Finding exposure tables in memory alone does not
-prove they are selected at runtime.
+source forwards exposure via command 18. We subsequently matched the installed
+sensor library and inspected its forwarding path. A guarded stock-kernel
+dispatch decoder proves commands 14–24, including 18, return success without
+applying a control. Finding exposure tables alone had not established that.
 
 The user supplied a phone photo from the same angle showing a lit room and
 visible ceiling light; the Mirror comparison was much darker and noisier.
@@ -202,29 +210,66 @@ Phone HDR/exposure makes this an uncalibrated comparison, but it means we should
 not dismiss the problem as simply an unlit room. A lens obstruction/cover check
 is still unverified; no physical privacy shutter is assumed to exist.
 
-Next pass: trace the installed exposure-control path, compare preview and saved
-pixels under stable lighting, and establish whether the configured target/gain
-limits or optical attenuation explain the mismatch before changing registers.
-Also retain clean-release startup checks and eventually test a real cold boot.
+### Repairing the control and testing gain headroom
+
+`legacy-camera-compat.c` intercepts only the exact 32-bit sensor request and
+command 18, with `debug.mirror.exposure_bridge=1`. It validates the descriptor's
+numeric v4l-subdev path and sysfs name `ov5640`, rather than hardcoding node 6.
+The pure helper `mirror-exposure-plan.h` accepts steps -12 through 12, scales
+six stock AEC target registers and restores their exact baseline at zero.
+This is a proposed 1/6-EV mapping, not calibrated photographic EV performance.
+Writes use the existing kernel command 2 and checked 32-bit structure layouts.
+The real return value/errno is preserved; a partial I²C failure is not atomic
+and rollback is not guaranteed. AEC remains enabled.
+
+The target-only image changed registers correctly but did not brighten the
+preview: gain stayed at the stock `0x200` ceiling. The separately gated
+`debug.mirror.gain_headroom=1` adds a `0x3ff` ceiling for positive requests and
+restores `0x200` for zero/negative requests. It does not force manual gain,
+change clocks, lengthen frames or disable automatic exposure.
+
+Latest continuous-preview sweep (private evidence
+`.work/gain-headroom-1788830187376`):
+
+| Request | Actual gain / ceiling | Sensor average `56a1` | Mean preview luma |
+| --- | --- | --- | --- |
+| Baseline 0 | `0x200 / 0x200` | `07` | ~17.4 |
+| +12 | `0x3ff / 0x3ff` | `0d` | 32.6–33.3 |
+| -12 | `0x200 / 0x200` | `07` | ~17.3–17.5 |
+| Restored 0 | `0x200 / 0x200` | `07` | ~17.3 |
+
+All six targets restored at zero. Integration `00/45/c0` and frame length
+`04/60` stayed unchanged. Release completed in 2.313 seconds; camera closed
+with zero restored. Positive compensation produced roughly 1.9× luma, not the
+4× implied by an ideal +2 EV response. Visual inspection still showed a dark,
+noisy image. The earlier phone photo is not a simultaneous controlled-lighting
+reference; current illumination cannot be inferred from that older photo.
+
+Next: establish a same-light reference and unobstructed lens, compare saved
+JPEG/video with preview, and investigate remaining exposure/optical limits.
+Retain clean-release startup checks and eventually test a real cold boot.
+Longer integration would trade brightness for motion blur/frame rate and has
+not been implemented. The latest gain test does not revalidate all older photo,
+video, startup or audio results on this image.
 
 ## Evidence and installed artifacts
 
-The most recent system image was flashed to `system` in 76.321 seconds and
+The most recent system image was flashed to `system` in 77.996 seconds and
 Android reached `sys.boot_completed=1`. Hashes identify local checkpoints, not
 a promise of bit-for-bit reproduction from this public repository alone.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `system-mirror-final.img` | `d4f5b63c05ce814a1049a3a3858b9c1a3eb0e12bba7f8178e7ae339014af308a` |
+| `system-mirror-final.img` | `a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38` |
 | `SnapdragonCamera-mirror.apk` | `ba9c9c7a8da7122479ca30ca177ad0f49307796a78a8ed4dab4ba497429142da` |
 | `libmmcamera_ov5640.so` | `8aa24b1b587fd834288b47852dd0314394dd64614210cec083b0949d632036b9` |
-| `libmmcamera_mirror_haf.so` | `2bd59c15ca19d38c38ae880c64330bc1dc1ee3cda4629406f5732d18f0269a3c` |
+| `libmmcamera_mirror_haf.so` | `bf1dd1c8a68e77d161584ea14c863ccb4ae4fcc411264f22d862eb501d4934ef` |
 | `mm-qcamera-daemon-mirror` | `3d2818e4d2fd5c77cc14d1d1d6c9882fcb342b62fa671263c3d0708303446d22` |
 | `libmmcamera2_cpp_module-mirror.so` | `395b74bd284f93bef3f053f0fc2ffa36a7d428d0ffcab374904c705abc01fee9` |
 | Camera HAL, 32-bit | `8aac22850afe19c224062840aa70e50d3bb4570f13bb4f8e091566aafdaa3eca` |
 | `libstagefright.so`, 32-bit | `77c8c8b8b20287c4179dd44ec260410363e98716b11acf1158a3e963bdf9f5b8` |
 | `libstagefright.so`, 64-bit | `e1eddb83afedb4fd660bad62b8df3a3b72f6311e3cca8650672144192688a625` |
-| `mirror_camera_diag.ko` | `0218cfd6cea6260cf70e52c67f4d98938c07219cce53f897a239eaf61a407266` |
+| `mirror_camera_diag.ko` | `f0e8000420cce72007b138109149c14ef8898e61ab1d31a516720f4c8b0afb65` |
 
 Selected private evidence (not published in Git):
 
@@ -243,8 +288,9 @@ Selected private evidence (not published in Git):
 
 - `/proc/mirror_camera_diag`: CSI MMIO. **Can hang the board when the camera is
   off, idle or in an error state.** “Read-only” does not make it universally safe.
-- `/proc/mirror_sensor_tables`: bounded reads of named resident kernel tables.
-- `/proc/mirror_sensor_exposure`: 20 fixed identity/exposure/gain/target register
+- `/proc/mirror_sensor_tables`: bounded reads of named resident kernel tables
+  and a signature-checked, range-checked exposure dispatch decoder.
+- `/proc/mirror_sensor_exposure`: 23 fixed identity/exposure/gain/target register
   reads guarded by the controller checks above; no arbitrary register API.
 
 The module is specific to the preserved kernel/configuration/symbol versions.
@@ -276,6 +322,7 @@ From the repository root, prepare the camera layers in order:
 ./mirror-build-camera-diag.sh
 ./mirror-build-snapcam.sh
 MIRROR_CAMERA_FRONT=1 MIRROR_VIDEO_RAW=1 \
+  MIRROR_EXPOSURE_BRIDGE=1 MIRROR_GAIN_HEADROOM=1 \
   MIRROR_REBUILD_CAMERA_HAL=1 MIRROR_REBUILD_STAGEFRIGHT=1 \
   MIRROR_CAMERA_VERBOSE=0 MIRROR_C2D_PROBE=0 \
   ./mirror-build-final-system.sh
@@ -290,6 +337,10 @@ Final-image checks inspect both media-library architectures and property/HAL
 markers. These commands build, **not flash**. Consult the recovery constraints
 before any separately authorized, exact-device `system` write.
 
+Both exposure flags default to 0. The command above deliberately reproduces the
+installed experimental configuration; gain headroom requires the bridge. At
+zero compensation it retains stock targets/ceiling, not permanent maximum gain.
+
 Host-only checks, without touching the Mirror:
 
 ```sh
@@ -298,6 +349,9 @@ node --check camera/decode-c2d-samples.mjs
 clang++ -std=c++11 -fsanitize=address,undefined -fno-omit-frame-pointer \
   camera/test-video-pack.cpp -o /tmp/mirror-test-video-pack
 /tmp/mirror-test-video-pack
+clang++ -std=c++11 -fsanitize=address,undefined -fno-omit-frame-pointer \
+  camera/test-exposure-plan.cpp -o /tmp/mirror-test-exposure-plan
+/tmp/mirror-test-exposure-plan
 ./mirror-build-camera-probe.sh
 ```
 

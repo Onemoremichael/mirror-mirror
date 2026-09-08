@@ -25,6 +25,7 @@ mkdir -p "$artifact_dir"
 docker run --rm --platform linux/amd64 --privileged \
   -v "$source_image:/build.img:ro" \
   -v "$compat_source:/legacy-camera-compat.c:ro" \
+  -v "$repo_root/camera/mirror-exposure-plan.h:/mirror-exposure-plan.h:ro" \
   -v "$artifact_dir:/artifacts" \
   alleen/apq8016_bm bash -lc '
 set -e

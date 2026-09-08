@@ -37,7 +37,8 @@ static int mirror_sensor_exposure_show(struct seq_file *out, void *unused)
 	unsigned long read_fn = kallsyms_lookup_name("msm_camera_cci_i2c_read");
 	const u16 registers[] = {0x300a,0x300b,0x3500,0x3501,0x3502,0x3503,
 		0x350a,0x350b,0x3406,0x3a00,0x3a18,0x3a19,0x380e,0x380f,
-		0x3a0f,0x3a10,0x3a1b,0x3a1e,0x5587,0x5588};
+		0x3a0f,0x3a10,0x3a1b,0x3a1e,0x5587,0x5588,
+		0x3a11,0x3a1f,0x56a1};
 	unsigned int i;
 	/* Offsets corroborated by preserved stock sensor_config32 disassembly. */
 	BUILD_BUG_ON(offsetof(struct msm_sensor_ctrl_t, sensor_i2c_client) != 2856);
@@ -105,6 +106,46 @@ static const struct file_operations mirror_sensor_exposure_fops = {
 	.llseek = seq_lseek, .release = single_release,
 };
 
+/* Decode only the already inspected stock config32 dispatch sequence. No
+ * caller-selected address, execution, MMIO or register writes are permitted.
+ * Refuse different instructions and require the entire table in kernel rodata.
+ */
+static void mirror_sensor_dispatch_show(struct seq_file *out)
+{
+	unsigned long fn = kallsyms_lookup_name("ov5640_sensor_config32");
+	unsigned long ro_start = kallsyms_lookup_name("__start_rodata");
+	unsigned long ro_end = kallsyms_lookup_name("__end_rodata");
+	const u32 expected[] = {0xb9400023, 0x51000862, 0x71005c5f,
+		0x540029e8, 0xf0002360, 0x91302000, 0x78625800,
+		0x10000062, 0x8b20a840, 0xd61f0000};
+	u32 instructions[ARRAY_SIZE(expected)];
+	s16 entries[24];
+	unsigned long table;
+	unsigned int i;
+	/* The checked ADRP immediate is +0x46f pages; ADD contributes 0xc08.
+	 * ADRP uses the real instruction page, not the function-relative page.
+	 */
+	if (!fn || !ro_start || ro_end <= ro_start
+			|| probe_kernel_read(instructions, (void *)(fn + 0x24), sizeof(instructions))
+			|| memcmp(instructions, expected, sizeof(expected))) {
+		seq_puts(out, "DISPATCH unavailable: stock instruction guard\n"); return;
+	}
+	table = ((fn + 0x34) & ~0xfffUL) + 0x46f000UL + 0xc08UL;
+	if (table < ro_start || table >= ro_end || ro_end - table < sizeof(entries)
+			|| probe_kernel_read(entries, (void *)table, sizeof(entries))) {
+		seq_puts(out, "DISPATCH unavailable: rodata bounds\n"); return;
+	}
+	for (i = 0; i < ARRAY_SIZE(entries); i++) {
+		long offset = 0x4c + (long)entries[i] * 4;
+		if (offset < 0 || offset >= 0x5ac || (offset & 3)) {
+			seq_puts(out, "DISPATCH unavailable: target bounds\n"); return;
+		}
+	}
+	for (i = 0; i < ARRAY_SIZE(entries); i++)
+		seq_printf(out, "DISPATCH command=%u config32_offset=%04lx\n",
+			i + 2, 0x4c + (long)entries[i] * 4);
+}
+
 /* Read named stock-driver tables/code only; no MMIO or sensor writes here. */
 static int mirror_sensor_tables_show(struct seq_file *out, void *unused)
 {
@@ -115,6 +156,7 @@ static int mirror_sensor_tables_show(struct seq_file *out, void *unused)
 		"ov5640_start_settings", "ov5640_stop_settings",
 		"ov5640_enable_aec_settings", "ov5640_disable_aec_settings"};
 	unsigned int n;
+	mirror_sensor_dispatch_show(out);
 	if (!symbol_size) { seq_puts(out, "symbol sizing unavailable\n"); return 0; }
 	for (n = 0; n < ARRAY_SIZE(names); n++) {
 		unsigned long addr = kallsyms_lookup_name(names[n]), size = 0, offset = 0, i;

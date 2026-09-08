@@ -1,0 +1,28 @@
+--- ov5640_lib.c
++++ ov5640_lib.c
+@@ -513,1 +513,1 @@
+-  { V4L2_MBUS_FMT_YUYV8_2X8 },
++  { V4L2_MBUS_FMT_UYVY8_2X8 },
+@@ -810,6 +810,6 @@
+-    .x_output = 2592*2,
+-    .y_output = 1944,
+-    .line_length_pclk = 2844, /* 2844 */
+-    .frame_length_lines = 1968, /* 1968 */
++    .x_output = 1920*2,
++    .y_output = 1080,
++    .line_length_pclk = 2500,
++    .frame_length_lines = 1120,
+     .vt_pixel_clk = 168000000,
+     .op_pixel_clk = 168000000,
+@@ -824,6 +824,6 @@
+     .x_output = 1280*2,
+-    .y_output = 960,
+-    .line_length_pclk = 1896, /* 1896 */
+-    .frame_length_lines = 984, /* 984 */
+-    .vt_pixel_clk = 112000000,
+-    .op_pixel_clk = 112000000,
++    .y_output = 720,
++    .line_length_pclk = 1892,
++    .frame_length_lines = 740,
++    .vt_pixel_clk = 84000000,
++    .op_pixel_clk = 84000000,

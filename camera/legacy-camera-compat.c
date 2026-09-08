@@ -12,6 +12,13 @@
 #include <dlfcn.h>
 #include <stdarg.h>
 #include <string.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <android/log.h>
+
+/* This old NDK's unistd.h also declares ioctl with an incompatible signed
+ * request type. Declare readlink directly to preserve the existing hook ABI. */
+extern ssize_t readlink(const char *, char *, size_t);
 
 typedef unsigned char mirror_u8;
 typedef unsigned int mirror_u32;
@@ -115,6 +122,47 @@ typedef char mirror_new_input_cfg_size_must_be_104[
 
 typedef int (*mirror_ioctl_fn)(int, unsigned long, ...);
 
+/* Bounded ABI evidence: configuration payloads only, never frame contents. */
+static void mirror_trace_config(int fd, unsigned long request, const void *argument)
+{
+  static unsigned counts[8];
+  unsigned nr = request & 255, size = (request >> 16) & 0x3fff;
+  unsigned i, bucket;
+  const unsigned char *bytes = argument;
+  char hex[513];
+  static const char digits[] = "0123456789abcdef";
+  if (((request >> 8) & 255) != 'V' || !argument || nr < 193 || nr > 199)
+    return;
+  bucket = nr - 193;
+  /* Sensor control shares this ioctl number with other camera controls.
+   * Record only the leading command word and payload size; do not dereference
+   * embedded pointers or label it as a sensor command without corroboration.
+   */
+  if (nr == 193 && size == 144) {
+    unsigned command;
+    char fdpath[64], target[128];
+    ssize_t length;
+    if (counts[bucket]++ >= 96) return;
+    memcpy(&command, argument, sizeof(command));
+    snprintf(fdpath, sizeof(fdpath), "/proc/self/fd/%d", fd);
+    length = readlink(fdpath, target, sizeof(target) - 1);
+    if (length < 0) length = 0;
+    target[length] = 0;
+    __android_log_print(ANDROID_LOG_INFO, "MirrorSensorABI",
+      "fd=%d path=%s request=%08lx size=%u command=%u",
+      fd, target, request, size, command);
+    return;
+  }
+  if (counts[bucket]++ >= 12 || size > 256) return;
+  for (i = 0; i < size; i++) {
+    hex[2*i] = digits[bytes[i] >> 4];
+    hex[2*i+1] = digits[bytes[i] & 15];
+  }
+  hex[size*2] = 0;
+  __android_log_print(ANDROID_LOG_INFO, "MirrorIspABI",
+    "request=%08lx size=%u data=%s", request, size, hex);
+}
+
 static void copy_camif_cfg(struct mirror_vfe_camif_cfg_new *to,
   const struct mirror_vfe_camif_cfg_old *from)
 {
@@ -149,6 +197,8 @@ int ioctl(int fd, unsigned long request, ...)
     real_ioctl = (mirror_ioctl_fn)dlsym(RTLD_NEXT, "ioctl");
   if (!real_ioctl)
     return -1;
+
+  mirror_trace_config(fd, request, argument);
 
   if (request == MIRROR_ISP_INPUT_CFG_OLD && argument) {
     const struct mirror_vfe_input_cfg_old *old_cfg =

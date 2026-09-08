@@ -1,0 +1,50 @@
+--- a/src/com/android/camera/PhotoUI.java
++++ b/src/com/android/camera/PhotoUI.java
+@@ -133,6 +133,7 @@
+     private SurfaceTextureSizeChangedListener mSurfaceTextureSizeListener;
+     private SurfaceView mSurfaceView = null;
+     private float mAspectRatio = 4f / 3f;
++    private float mMirrorSensorAspectRatio = 4f / 3f;
+     private boolean mAspectRatioResize;
+ 
+     private boolean mOrientationResize;
+@@ -320,6 +321,7 @@
+ 
+     public void setAspectRatio(float ratio) {
+         if (ratio <= 0.0) throw new IllegalArgumentException();
++        mMirrorSensorAspectRatio = ratio;
+ 
+         if (mOrientationResize &&
+                 mActivity.getResources().getConfiguration().orientation
+@@ -340,7 +342,20 @@
+         FrameLayout.LayoutParams lp;
+         float scaledTextureWidth, scaledTextureHeight;
+         int rotation = CameraUtil.getDisplayRotation(mActivity);
+-        if (mScreenRatio == CameraUtil.RATIO_16_9
++        if (android.os.SystemProperties.getBoolean("ro.mirror.camera.front", false)) {
++            // Use the actual camera-to-display transform, not phone-native
++            // portrait assumptions: Mirror's native panel is landscape.
++            float width = mMaxPreviewWidth, height = mMaxPreviewHeight;
++            if (width <= 0 || height <= 0 || mPreviewOrientation < 0) return;
++            float aspect = mMirrorSensorAspectRatio;
++            if (mPreviewOrientation % 180 != 0) aspect = 1f / aspect;
++            scaledTextureWidth = Math.min(width, height * aspect);
++            scaledTextureHeight = scaledTextureWidth / aspect;
++            lp = new FrameLayout.LayoutParams(Math.round(scaledTextureWidth),
++                    Math.round(scaledTextureHeight), Gravity.CENTER);
++            Log.i(TAG, "Mirror preview fit " + lp.width + "x" + lp.height
++                    + " rotation=" + mPreviewOrientation);
++        } else if (mScreenRatio == CameraUtil.RATIO_16_9
+                 && CameraUtil.determinCloseRatio(ratio) == CameraUtil.RATIO_4_3) {
+             int l = (mTopMargin + mBottomMargin) * 4;
+             int s = l * 9 / 16;
+@@ -1041,6 +1056,9 @@
+             mMenu.addModeBack();
+         }
+         mPreviewOrientation = orientation;
++        if (android.os.SystemProperties.getBoolean("ro.mirror.camera.front", false)) {
++            layoutPreview(mAspectRatio);
++        }
+     }
+ 
+     // shutter button handling

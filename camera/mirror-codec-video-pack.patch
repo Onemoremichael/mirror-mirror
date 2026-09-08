@@ -1,0 +1,62 @@
+diff --git a/media/libstagefright/MediaCodecSource.cpp b/media/libstagefright/MediaCodecSource.cpp
+index aef67151a..53ea4ca35 100644
+--- a/media/libstagefright/MediaCodecSource.cpp
++++ b/media/libstagefright/MediaCodecSource.cpp
+@@ -37,6 +37,9 @@
+ #include <media/stagefright/PersistentSurface.h>
+ #include <media/stagefright/Utils.h>
+ #include <OMX_Core.h>
++#include <OMX_IVCommon.h>
++#include <cutils/properties.h>
++#include "mirror-video-pack.h"
+ #include <stagefright/AVExtensions.h>
+ 
+ namespace android {
+@@ -52,6 +55,7 @@ struct MediaCodecSource::Puller : public AHandler {
+ 
+     void pause();
+     void resume();
++    sp<MetaData> sourceFormat() { return mSource->getFormat(); }
+ 
+ protected:
+     virtual void onMessageReceived(const sp<AMessage> &msg);
+@@ -609,7 +613,38 @@ status_t MediaCodecSource::feedEncoderInputBuffers() {
+ 
+             size = mbuf->size();
+ 
+-            memcpy(inbuf->data(), mbuf->data(), size);
++            char mirrorRawVideo[PROPERTY_VALUE_MAX];
++            property_get("debug.mirror.video_raw", mirrorRawVideo, "0");
++            bool mirrorPacked = false;
++            if (mIsVideo && !(mFlags & FLAG_USE_METADATA_INPUT)
++                    && mirrorRawVideo[0] == '1' && mirrorRawVideo[1] == '\0') {
++                sp<MetaData> sourceFormat = mPuller->sourceFormat();
++                int32_t width = 0, height = 0, color = 0;
++                if (sourceFormat != NULL
++                        && sourceFormat->findInt32(kKeyWidth, &width)
++                        && sourceFormat->findInt32(kKeyHeight, &height)
++                        && sourceFormat->findInt32(kKeyColorFormat, &color)
++                        && color == OMX_COLOR_FormatYUV420SemiPlanar) {
++                    size_t packed = mirror_pack_venus_nv12(inbuf->data(),
++                            inbuf->capacity(), (const uint8_t *)mbuf->data(),
++                            size, width, height);
++                    if (packed != 0) {
++                        ALOGV("Mirror recording: packed Venus NV12 %zu -> %zu", size, packed);
++                        size = packed;
++                        mirrorPacked = true;
++                    }
++                }
++            }
++            if (!mirrorPacked) {
++                if (size > inbuf->capacity()) {
++                    ALOGE("Mirror recording: refusing oversized input %zu > %zu",
++                            size, inbuf->capacity());
++                    mbuf->release();
++                    signalEOS(ERROR_MALFORMED);
++                    return ERROR_MALFORMED;
++                }
++                memcpy(inbuf->data(), mbuf->data(), size);
++            }
+ 
+             if (mIsVideo) {
+                 // video encoder will release MediaBuffer when done

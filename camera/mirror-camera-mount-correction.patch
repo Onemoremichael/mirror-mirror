@@ -1,0 +1,14 @@
+--- a/QCamera2/HAL/QCamera2Factory.cpp
++++ b/QCamera2/HAL/QCamera2Factory.cpp
+@@ -145,7 +145,7 @@
+-        // Mirror's portrait display is rotation 3; measured upright preview
+-        // is 270 degrees. Android's front-camera formula yields that with 180.
++        // User confirmed the 270-degree preview was upside down. With
++        // portrait Display rotation 3, front mount 0 yields preview 90.
+         info->facing = CAMERA_FACING_FRONT;
+-        info->orientation = 180;
+-        ALOGI("Mirror camera metadata: front, mount 180");
++        info->orientation = 0;
++        ALOGI("Mirror camera metadata: front, mount 0");
+     }
+     ALOGV("%s: X", __func__);

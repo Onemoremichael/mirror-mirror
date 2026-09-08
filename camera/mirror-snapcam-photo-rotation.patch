@@ -1,0 +1,33 @@
+--- a/src/com/android/camera/PhotoModule.java
++++ b/src/com/android/camera/PhotoModule.java
+@@ -1569,6 +1569,6 @@
+         // Set rotation and gps data.
+         int orientation = mOrientation;
+-        mJpegRotation = CameraUtil.getJpegRotation(mCameraId, orientation);
++        mJpegRotation = getCaptureRotation(orientation);
+         String pictureFormat = mParameters.get(KEY_PICTURE_FORMAT);
+         Location loc = getLocationAccordPictureFormat(pictureFormat);
+ 
+@@ -3293,5 +3293,16 @@
+     }
+ 
++    private int getCaptureRotation(int orientation) {
++        if (SystemProperties.getBoolean("ro.mirror.camera.front", false)
++                && orientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
++            int rotation = CameraUtil.getDisplayOrientation(
++                    CameraUtil.getDisplayRotation(mActivity), mCameraId);
++            Log.i(TAG, "Mirror capture rotation=" + rotation + " (no orientation sensor)");
++            return rotation;
++        }
++        return CameraUtil.getJpegRotation(mCameraId, orientation);
++    }
++
+     private void setFlipValue() {
+         // Read Flip mode from adb command
+         //value: 0(default) - FLIP_MODE_OFF
+@@ -3305,4 +3316,4 @@
+-        int rotation = CameraUtil.getJpegRotation(mCameraId, mOrientation);
++        int rotation = getCaptureRotation(mOrientation);
+         mParameters.setRotation(rotation);
+         if (rotation == 90 || rotation == 270) {
+             // in case of 90 or 270 degree, V/H flip should reverse

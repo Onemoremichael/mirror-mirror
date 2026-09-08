@@ -23,7 +23,8 @@
    },
    .csiphy_params = {
      .lane_cnt = 2,
-     .settle_cnt = 0x1b,
+-    .settle_cnt = 0x1b,
++    .settle_cnt = 0x18,
 +    .lane_mask = 0x7,
  #ifndef VFE_40
      .combo_mode = 1,

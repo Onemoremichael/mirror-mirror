@@ -1,0 +1,18 @@
+--- a/src/com/android/camera/VideoModule.java
++++ b/src/com/android/camera/VideoModule.java
+@@ -1499,4 +1499,15 @@
+             }
+         }
++        if (SystemProperties.getBoolean("ro.mirror.camera.front", false)
++                && mOrientation == OrientationEventListener.ORIENTATION_UNKNOWN) {
++            // The fixed Mirror has no orientation sensor. Saved video is not
++            // mirrored, so undo front-preview mirror compensation.
++            CameraInfo info = CameraHolder.instance().getCameraInfo()[mCameraId];
++            int preview = CameraUtil.getDisplayOrientation(
++                    CameraUtil.getDisplayRotation(mActivity), mCameraId);
++            rotation = info.facing == CameraInfo.CAMERA_FACING_FRONT
++                    ? (360 - preview) % 360 : preview;
++            Log.i(TAG, "Mirror video rotation=" + rotation + " (no orientation sensor)");
++        }
+         mMediaRecorder.setOrientationHint(rotation);
+         setupMediaRecorderPreviewDisplay();

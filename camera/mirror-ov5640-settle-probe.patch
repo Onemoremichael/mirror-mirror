@@ -1,0 +1,22 @@
+--- ov5640_lib.c
++++ ov5640_lib.c
+@@ -8,1 +8,2 @@
+ #include <stdio.h>
++#include <sys/system_properties.h>
+@@ -935,4 +936,16 @@
+ void *ov5640_open_lib(void)
+ {
++  /* Bring-up only: bounded receiver timing sweep, no persistent override. */
++  char value[PROP_VALUE_MAX] = {0};
++  unsigned int settle = 0x18;
++  __system_property_get("debug.mirror.camera_settle", value);
++  if (value[0] == '1' && value[2] == 0) {
++    switch (value[1]) {
++      case '4': settle = 0x14; break;
++      case '6': settle = 0x16; break;
++      case 'a': settle = 0x1a; break;
++    }
++  }
++  ov5640_csi_params.csiphy_params.settle_cnt = settle;
+   return &sensor_lib_ptr;
+ }

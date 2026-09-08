@@ -4,7 +4,8 @@ A responsive clock on pure black, supporting portrait and landscape. Sparse geoc
 points and a small epicycle surround the time. This is decorative geometry, not
 an astronomical model. The display contains only the time, with no branding,
 navigation, captions or status text. The mirror itself supplies the background.
-Actual LCD glow and legibility still need testing on the physical Mirror.
+The Android clock has been visually tested on the physical Mirror in portrait
+and landscape. LCD glow and legibility can still vary with room lighting.
 
 Run `node ux-lab/server.mjs` from the repository root, then open
 http://localhost:8766. Double-click the clock display for fullscreen where

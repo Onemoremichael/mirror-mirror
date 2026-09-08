@@ -1,0 +1,29 @@
+diff --git a/QCamera2/HAL/QCamera2Factory.cpp b/QCamera2/HAL/QCamera2Factory.cpp
+index 11c6088..c13f97f 100644
+--- a/QCamera2/HAL/QCamera2Factory.cpp
++++ b/QCamera2/HAL/QCamera2Factory.cpp
+@@ -33,6 +33,7 @@
+ #include <stdlib.h>
+ #include <utils/Errors.h>
+ #include <hardware/camera.h>
++#include <cutils/properties.h>
+ 
+ #include "QCamera2Factory.h"
+ 
+@@ -136,6 +137,16 @@ int QCamera2Factory::getCameraInfo(int camera_id, struct camera_info *info)
+     }
+ 
+     rc = QCamera2HardwareInterface::getCapabilities((uint32_t)camera_id, info);
++    char mirrorFront[PROPERTY_VALUE_MAX];
++    property_get("ro.mirror.camera.front", mirrorFront, "0");
++    if (rc == NO_ERROR && mNumOfCameras == 1 && camera_id == 0
++            && mirrorFront[0] == '1' && mirrorFront[1] == '\0') {
++        // Mirror's portrait display is rotation 3; measured upright preview
++        // is 270 degrees. Android's front-camera formula yields that with 180.
++        info->facing = CAMERA_FACING_FRONT;
++        info->orientation = 180;
++        ALOGI("Mirror camera metadata: front, mount 180");
++    }
+     ALOGV("%s: X", __func__);
+     return rc;
+ }

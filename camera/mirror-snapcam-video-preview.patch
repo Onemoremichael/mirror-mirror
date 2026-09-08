@@ -1,0 +1,31 @@
+--- a/src/com/android/camera/VideoUI.java
++++ b/src/com/android/camera/VideoUI.java
+@@ -108,1 +108,2 @@
+     private float mAspectRatio = 4f / 3f;
++    private float mMirrorSensorAspectRatio = 4f / 3f;
+@@ -314,1 +315,2 @@
+         float ratio;
++        mMirrorSensorAspectRatio = (float) width / height;
+@@ -340,1 +342,12 @@
+-        if (mScreenRatio == CameraUtil.RATIO_16_9
++        if (android.os.SystemProperties.getBoolean("ro.mirror.camera.front", false)) {
++            float width = mMaxPreviewWidth, height = mMaxPreviewHeight;
++            if (width <= 0 || height <= 0 || mPreviewOrientation < 0) return;
++            float aspect = mMirrorSensorAspectRatio;
++            if (mPreviewOrientation % 180 != 0) aspect = 1f / aspect;
++            scaledTextureWidth = Math.min(width, height * aspect);
++            scaledTextureHeight = scaledTextureWidth / aspect;
++            lp = new FrameLayout.LayoutParams(Math.round(scaledTextureWidth),
++                    Math.round(scaledTextureHeight), Gravity.CENTER);
++            Log.i(TAG, "Mirror video preview fit " + lp.width + "x" + lp.height
++                    + " rotation=" + mPreviewOrientation);
++        } else if (mScreenRatio == CameraUtil.RATIO_16_9
+@@ -527,1 +542,4 @@
+         mPreviewOrientation = orientation;
++        if (android.os.SystemProperties.getBoolean("ro.mirror.camera.front", false)) {
++            layoutPreview(mAspectRatio);
++        }
+@@ -634,1 +652,3 @@
+     public void setAspectRatio(double ratio) {
++        if (ratio <= 0) throw new IllegalArgumentException();
++        mMirrorSensorAspectRatio = (float) ratio;

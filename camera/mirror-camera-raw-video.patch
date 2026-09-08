@@ -1,0 +1,16 @@
+--- CameraSource.cpp
++++ CameraSource.cpp
+@@ -572,4 +572,13 @@
+ 
++    // Mirror's legacy CameraSource metadata (type 0) is incompatible with
++    // the software AVC encoder. Opt into normal pixels for this diagnostic.
++    // Default remains unchanged for other builds and hardware encoders.
++    char mirrorRawVideo[PROPERTY_VALUE_MAX];
++    property_get("debug.mirror.video_raw", mirrorRawVideo, "0");
++    if (mirrorRawVideo[0] == '1' && mirrorRawVideo[1] == '\0') {
++        storeMetaDataInVideoBuffers = false;
++        ALOGI("Mirror recording: requesting raw video buffers");
++    }
+     // By default, do not store metadata in video buffers
+     mIsMetaDataStoredInVideoBuffers = false;
+     mCamera->storeMetaDataInBuffers(false);

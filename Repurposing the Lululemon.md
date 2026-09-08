@@ -1,5 +1,12 @@
 # Rooting / Repurposing the Lululemon "Mirror" Model One (APQ8016E) — A First-Principles Guide
 
+> **Historical research, not the current recovery procedure.** The tested unit
+> now runs reconstructed Android userspace on its preserved stock boot/kernel
+> stack. Several hypotheses and proposed routes below were superseded by device
+> evidence. Start with [RECOVERY-STATUS.md](RECOVERY-STATUS.md) and the
+> [camera implementation guide](camera/README.md); do not use this research
+> document as a flashing checklist.
+
 > **Observed-unit update (2026-09-03):** USB and Sahara reconnaissance has now
 > identified `HWID 0x007060e100000000` and public-key hash
 > `35ac01e7ee8478261aea5134e07e45cb6c5621d42716c15bb10dee0c53d65759`.

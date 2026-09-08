@@ -1272,3 +1272,133 @@ was not controlled against the user's older phone photo. No lens obstruction
 is established. This test did not revalidate saved JPEG/video, perceptual A/V
 sync, physical cold starts or fix intermittent blank starts. Current docs now
 separate this installed experiment from the earlier baseline and rejected tests.
+
+## Saved-photo check: darkness is not confined to the preview
+
+After the documentation merge, authorized USB ADB was live and the camera
+service had no client. On the unchanged a6b0 image, launched the probe with
+`autoRotation=true`, `photo=true`, and initial `exposure=12`. API request was
+logged as +2.000004 EV. Preview began at 763 ms; baseline samples stayed around
+17.4–17.8 luma. At 20 seconds a 135,148-byte, 1280×720 JPEG was saved and preview
+resumed. Full JPEG decode passed; decoded YAVG was 17.5922 (full-range JPEG,
+not an exact color-range match to preview). Visual inspection confirmed darkness
+and noise in the saved image itself, not only in the remote screenshot.
+
+Post-photo readback showed stock targets and gain ceiling/actual gain `0x200`,
+integration `00/3f/00`, sensor average `06`, and AEC enabled. This test does not
+establish whether startup or capture mode overwrote a previously applied value:
+no pre-photo register snapshot was taken. It does show that an initial positive
+request did not yield the brighter live-sweep result through this capture flow.
+Next isolate live adjustment before/during/after capture and verify register
+retention across those transitions before adding any automatic reapplication.
+
+Home closed the probe; release 1808 ms and empty active-client list verified.
+Private evidence: `.work/photo-exposure-startup-check`. The diagnostic photo
+does not set saved JPEG rotation and is not an orientation regression test for
+the separately corrected Snapcam app. No new firmware or app was installed.
+
+## Live adjustment survives still capture
+
+Added bounded opt-in `photoDelayMs` (8000–60000, default 20000) to the probe,
+plus a 60-frame guard before capture. Rebuilt, signature-verified and installed
+the diagnostic APK only. On an idle camera, ran the existing exposure sweep
+with photo capture at 10 seconds: live +12 at ~5 seconds, photo at 10, -12 at
+12, zero at 19. Private evidence: `.work/photo-live-exposure-check`.
+
+First preview frame 688 ms; baseline frame60 luma17.5486. Live +12 was accepted
+at frame121; subsequent luma33.7707 and34.1391. Photo at frame249 saved222535
+bytes; full JPEG decode passed with YAVG33.9937. Sensor snapshots around 8 and
+11 seconds were identical, including gain/ceiling0x3ff and positive targets.
+Thus this capture did not reset the live adjustment, and the brighter result
+reached saved pixels. Initial-request ordering remains the stronger next lead;
+this does not prove behavior for every mode/resolution/app transition.
+
+Negative and zero requests executed; final readback restored all stock targets
+and gain/ceiling0x200. Home release4517ms and empty active-client list verified.
+The image remains below the desired quality; numerical improvement alone does
+not complete brightness recovery. No system flash occurred in this pass.
+
+## Startup-only loss and same-value suppression isolated
+
+Two additional valid previews on the unchanged system isolate the next fault.
+First, an initial +12 request without photo capture produced stock targets and
+gain/ceiling0x200 at seven seconds (luma ~17.8). This rules out still capture as
+a necessary cause of the initial-request failure. Kernel log shows the stock
+1080p mode table being selected during startup, but available logs do not yet
+prove the exact ordering of exposure writes relative to that table.
+
+Second, initial +12 followed by the sweep's repeated live +12 at five seconds
+still produced stock targets/gain at nine seconds and luma ~17.5, unlike the
+successful live 0→12 transition. Local HY22 source
+`hardware/qcom/camera/QCamera2/HAL/QCameraParameters.cpp`,
+`setExposureCompensation(const QCameraParameters&)`, explicitly returns success
+without forwarding when the new value equals the cached previous value. This
+source behavior is consistent with the observed failed same-value retry; a
+timer that merely repeats the requested value is therefore not a sound fix.
+
+Evidence folders: `.work/exposure-startup-order` and
+`.work/exposure-same-value-check`. First frames748/929ms; releases1579/816ms;
+idle service verified after both. Final sweep restored zero. Next trace the
+startup application point and retain/reapply the desired exposure at the actual
+mode/stream transition, accounting for the HAL cache rather than changing all
+parameter calls indiscriminately. No new firmware was installed.
+
+## Startup exposure candidate prepared, not deployed
+
+Added `mirror-camera-startup-exposure.patch` and wired it into the explicit
+camera-HAL rebuild path. After successful `startPreview` channel startup, gated
+by `debug.mirror.exposure_bridge=1`, it locks the HAL parameter mutex and sends
+only the cached exposure through the backend batch interface. This bypasses the
+same-value shortcut without changing the cached value, using timers, forcing
+maximum gain, or resending unrelated controls. Failure is logged while retaining
+the preview-start result. The shared parameter batch is initialized and cleared;
+review state-machine ordering/pending batches before deployment.
+
+Patch application checks against the local HY22 source, shell syntax and diff
+checks passed. This is an uncompiled, uninstalled candidate, not evidence that
+startup exposure is fixed. Channel start completion may still precede sensor
+readiness; live initial-positive/zero/negative checks and capture/restart
+regressions are required. Installed image remains a6b0.
+
+## Startup candidate build in progress
+
+Reviewed the state-machine start and parameter-restart paths: parameter commit
+precedes preview startup on the inspected paths. Strengthened the helper to
+save and restore the shared parameter batch under the HAL mutex instead of
+clearing it permanently; it does not commit changes to the app-visible map.
+The backend uses the already mapped parameter buffer, so a separate unmapped
+buffer is not a substitute.
+
+The first build stopped during patch application: header and HWI hunks applied,
+but the parameters implementation hunk was rejected. Inspection showed the
+expected function still present, so this was not established as a source-version
+mismatch. Switched to checked per-file Git patch application, allowing this
+partial application to resume without duplicating successful hunks. The retry
+passed patching and is actively processing the HAL build (session12108 at this
+checkpoint). No candidate image or live success is claimed yet. Preserved the
+a6b0 system image locally as `.work/system-a6b0-before-startup-exposure.img`.
+Do not run another build against the shared ext4 image until this one terminates.
+
+## Startup exposure fix compiled, deployed and first live pass verified
+
+Build session12108 completed successfully. New HAL SHA-256:
+`62daf62bf494b4d11e79787077b2590362bb9f8134f53d52352f399e17fbe7fb`.
+System SHA-256:
+`36a056b88be096cef975dfeea24f982aa5020d88ff5944c258278ca69a4ca18d`.
+Sensor, both stagefright libraries, CPP and Wi-Fi hashes matched the preceding
+checkpoint. With camera idle and Mac on AC, system-only flash completed76.368s;
+authorized USB and boot_completed1 returned. No other partition was written.
+
+First test requested initial+12 and then the existing sweep (+12 at5s, -12 at12s,
+zero at19s). HAL log explicitly reports `Mirror startup exposure value=12
+result=0`. The first frame at892ms already had mean luma34.4811; frame10=34.6360
+and frame60=37.7180, all before the redundant live request. At nine seconds
+readback confirmed all positive targets and gain/ceiling0x3ff. Sensor average
+was11 hex. Later positive frames varied43.9–50.2; lighting/motion was not held
+constant, so do not interpret these as an improvement in maximum gain capacity.
+
+Zero restoration returned stock targets/gain ceiling, and final preview luma
+was17.70. Release738ms; empty active-client list verified. Evidence:
+`.work/startup-reapply-first-test`. This first pass supports the event-driven
+startup fix, not universal reliability or full brightness completion. Repeat
+initial zero/negative/positive, still-capture and recording transitions next.

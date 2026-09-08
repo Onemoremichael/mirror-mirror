@@ -5,6 +5,10 @@ in [CAMERA-RECOVERY.md](CAMERA-RECOVERY.md), not this current-state snapshot.
 
 ## Installed system
 
+Development is paused at the owner's request. The last live test ended with
+stock exposure restored, `CAMERA_RELEASED`, and no active camera client. No
+automatic clock restoration. This records the stopping point, not a live monitor.
+
 The current image enables the narrowly scoped exposure bridge and experimental
 gain headroom. The stock exposure command was a successful no-op; live sensor
 target changes now work. Positive compensation raises gain and measured preview
@@ -40,16 +44,24 @@ front/back camera pairs: old BACK metadata was a software label.
 Installed sparse `system-mirror-final.img` SHA-256:
 
 ```text
-a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38
+36a056b88be096cef975dfeea24f982aa5020d88ff5944c258278ca69a4ca18d
 ```
 
-It was flashed to `system` in 77.996 seconds and boot-verified. Its camera
+It was flashed to `system` in 76.368 seconds and boot-verified. Its camera
 configuration is FRONT/0, default settle count 0x18, normal C2D (sampling wrapper
 disabled), quiet processing logs, and `debug.mirror.video_raw=1` loaded from
 `build.prop` after reboot. `debug.mirror.exposure_bridge=1` and
 `debug.mirror.gain_headroom=1` are enabled; builders default both to 0, so retain
 them explicitly to reproduce this experimental configuration. No manual
 recording-property setup is now required.
+
+Current 32-bit camera HAL SHA-256:
+`62daf62bf494b4d11e79787077b2590362bb9f8134f53d52352f399e17fbe7fb`.
+It resends only the cached exposure after successful preview startup, under the
+parameter lock, preserving the shared parameter batch. The first live test
+logged value12/result0 and produced luma34.48 on the first frame, before any
+repeat request. Positive sensor targets and gain ceiling were verified; zero
+restored stock. Release738ms and idle service verified. Full regressions pending.
 
 Current Snapcam APK SHA-256:
 
@@ -69,13 +81,16 @@ unresolved; these six passes do not establish universal reliability or physical
 cold-start success. Wake plus keyguard dismissal is needed before measuring an
 app launch.
 
-The latest sweep measured baseline luma ~17.4 and positive-compensation luma
+The preceding gain-headroom sweep measured baseline luma ~17.4 and positive-compensation luma
 32.6–33.3. Gain/ceiling changed from `0x200` to `0x3ff`; the sensor's own average
 rose from `07` to `0d`. Integration and frame length stayed unchanged. All six
 targets and the stock gain ceiling restored at zero; release took 2.313 seconds.
 The image remains dark/noisy. A same-light phone comparison and lens-cover check
 are unverified; the older lit-room photo is not a current lighting measurement.
-Saved media and full startup regression have not been repeated on this image.
+On the preceding image, live-adjusted JPEG capture decoded successfully at
+luma33.99 and retained settings across capture. Startup-only requests failed,
+leading to the current HAL correction. Saved media and full startup regression
+have not been repeated on the newly installed image.
 
 See [camera/README.md](camera/README.md) for the full implementation breakdown,
 patch inventory, artifact hashes, failed approaches, evidence and build/test

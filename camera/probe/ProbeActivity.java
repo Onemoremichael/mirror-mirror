@@ -264,9 +264,13 @@ public class ProbeActivity extends Activity implements SurfaceHolder.Callback {
                 } catch (Exception e) { note("VIDEO_ERROR " + e); stopRecording(); release(); }
             }, 5000);
             if (getIntent().getBooleanExtra("photo", false)) {
+                final int photoDelay = getIntent().getIntExtra("photoDelayMs", 20000);
+                if (photoDelay < 8000 || photoDelay > 60000)
+                    throw new IllegalArgumentException("photoDelayMs outside 8000..60000");
                 deleteFile("photo.jpg");
                 handler.postDelayed(() -> {
                     if (camera == null) return;
+                    if (frames < 60) { note("PHOTO_SKIPPED insufficient frames=" + frames); return; }
                     try {
                         note("PHOTO_REQUEST frames=" + frames);
                         camera.takePicture(null, null, (data, c) -> {
@@ -278,7 +282,7 @@ public class ProbeActivity extends Activity implements SurfaceHolder.Callback {
                             catch (Exception e) { note("RESUME_ERROR " + e); }
                         });
                     } catch (Exception e) { note("PHOTO_ERROR " + e); }
-                }, 20000);
+                }, photoDelay);
             }
         } catch(Exception e) { note("OPEN_ERROR " + e); }
     }

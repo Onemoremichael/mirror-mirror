@@ -7,17 +7,21 @@ MIRROR, not every hardware revision or Android camera app.
 
 ## What works, and what does not
 
-The installed gain-headroom checkpoint is
-`a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38`.
+The installed startup-exposure checkpoint is
+`36a056b88be096cef975dfeea24f982aa5020d88ff5944c258278ca69a4ca18d`.
 The exposure bridge repairs a stock no-op control. Optional gain headroom now
 produces about 1.9× measured brightness at positive compensation, but the image
 remains dark and noisy. This is progress, **not a completed brightness fix**.
+
+Development is paused at the owner's request, with the last test closed cleanly
+and stock exposure restored. The startup correction passed one device test;
+it still needs broader regression testing when work resumes.
 
 | Area | Verified result | Remaining boundary |
 | --- | --- | --- |
 | Hardware | One fixed-focus OV5640 front camera | No second/back camera |
 | Preview | Coherent 720p and 1080p diagnostic frames; upright Snapcam photo/video preview | Image is much too dark; historical intermittent blank/invalid starts |
-| Photos | Upright portrait JPEG saved and fully decoded | Latest exposure improvement tested in preview, not yet revalidated in saved JPEG/video |
+| Photos | Upright Snapcam JPEG; brighter diagnostic JPEG verified on preceding image | Capture/video regression on latest startup-correction image pending |
 | Video | Ordinary Snapcam 720p H.264 with AAC, upright and fully decoded | Software encoding, about 22.79 fps in the latest clip; not a guaranteed 30 fps |
 | Rotation | FRONT/0 metadata, portrait desktop; correct preview proportions | Other third-party apps have not been exhaustively tested |
 | Reboot | Raw recording property loads automatically; three post-reboot probe opens passed | Not proof of a physical cold-power-on recovery or universal startup reliability |
@@ -228,7 +232,7 @@ preview: gain stayed at the stock `0x200` ceiling. The separately gated
 restores `0x200` for zero/negative requests. It does not force manual gain,
 change clocks, lengthen frames or disable automatic exposure.
 
-Latest continuous-preview sweep (private evidence
+Gain-headroom baseline sweep (private evidence
 `.work/gain-headroom-1788830187376`):
 
 | Request | Actual gain / ceiling | Sensor average `56a1` | Mean preview luma |
@@ -252,21 +256,56 @@ Longer integration would trade brightness for motion blur/frame rate and has
 not been implemented. The latest gain test does not revalidate all older photo,
 video, startup or audio results on this image.
 
+### Startup correction and saved-photo verification
+
+Initial +12 requests produced stock sensor settings even without taking a photo.
+Repeating +12 live did not help: the HAL compares against its cached value and
+returns success without forwarding unchanged requests. In contrast, live 0→12
+worked. A timed capture after that live change saved a fully decoded JPEG with
+luma33.99; register snapshots before and after capture matched. This isolates
+startup, not still capture, as the observed loss point in that tested mode.
+
+`mirror-camera-startup-exposure.patch` adds a gated resend after successful
+`startPreview` channel startup. Under the HAL parameter mutex it preserves the
+shared batch, sends only the cached exposure through the backend, then restores
+the batch. It does not change the app-visible value or add a timer. The gate is
+`debug.mirror.exposure_bridge=1`; errors are logged without changing the preview
+start result. The builder checks/applies each affected source file separately,
+allowing recovery from the initial partially applied patch.
+
+The rebuilt HAL compiled and was installed in the current system-only update.
+First live test: value12/result0 logged; first frame at892ms already measured
+luma34.48, before the redundant +12 sweep request. Readback confirmed positive
+targets and gain/ceiling0x3ff. Zero restored stock, release738ms, service idle.
+Later brightness varied with uncontrolled scene conditions and is not proof of
+additional gain capacity. This is one startup pass, not universal reliability.
+
+Private evidence: `.work/photo-exposure-startup-check`,
+`.work/photo-live-exposure-check`, `.work/exposure-startup-order`,
+`.work/exposure-same-value-check`, `.work/startup-reapply-first-test`.
+The probe's optional `photoDelayMs` accepts8000–60000 (default20000), with a
+60-frame capture guard; these diagnostic photos do not set saved rotation and
+must not be treated as Snapcam orientation regressions.
+
+Resume with initial zero/negative/positive requests, repeated starts and
+capture/recording transitions. Then address remaining darkness/noise under
+controlled lighting, cold-start reliability and perceptual A/V synchronization.
+
 ## Evidence and installed artifacts
 
-The most recent system image was flashed to `system` in 77.996 seconds and
+The most recent system image was flashed to `system` in 76.368 seconds and
 Android reached `sys.boot_completed=1`. Hashes identify local checkpoints, not
 a promise of bit-for-bit reproduction from this public repository alone.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| `system-mirror-final.img` | `a6b0c96810b9b0ef2998a2ec2e83614fb77b4aa1170c3c0f13a1358e39d67a38` |
+| `system-mirror-final.img` | `36a056b88be096cef975dfeea24f982aa5020d88ff5944c258278ca69a4ca18d` |
 | `SnapdragonCamera-mirror.apk` | `ba9c9c7a8da7122479ca30ca177ad0f49307796a78a8ed4dab4ba497429142da` |
 | `libmmcamera_ov5640.so` | `8aa24b1b587fd834288b47852dd0314394dd64614210cec083b0949d632036b9` |
 | `libmmcamera_mirror_haf.so` | `bf1dd1c8a68e77d161584ea14c863ccb4ae4fcc411264f22d862eb501d4934ef` |
 | `mm-qcamera-daemon-mirror` | `3d2818e4d2fd5c77cc14d1d1d6c9882fcb342b62fa671263c3d0708303446d22` |
 | `libmmcamera2_cpp_module-mirror.so` | `395b74bd284f93bef3f053f0fc2ffa36a7d428d0ffcab374904c705abc01fee9` |
-| Camera HAL, 32-bit | `8aac22850afe19c224062840aa70e50d3bb4570f13bb4f8e091566aafdaa3eca` |
+| Camera HAL, 32-bit | `62daf62bf494b4d11e79787077b2590362bb9f8134f53d52352f399e17fbe7fb` |
 | `libstagefright.so`, 32-bit | `77c8c8b8b20287c4179dd44ec260410363e98716b11acf1158a3e963bdf9f5b8` |
 | `libstagefright.so`, 64-bit | `e1eddb83afedb4fd660bad62b8df3a3b72f6311e3cca8650672144192688a625` |
 | `mirror_camera_diag.ko` | `f0e8000420cce72007b138109149c14ef8898e61ab1d31a516720f4c8b0afb65` |

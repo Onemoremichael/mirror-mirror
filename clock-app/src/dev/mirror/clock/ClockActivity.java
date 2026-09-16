@@ -17,6 +17,8 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.view.Gravity;
 
 public class ClockActivity extends Activity {
     private static final String OFFLINE = "file:///android_asset/clock/index.html";
@@ -24,6 +26,9 @@ public class ClockActivity extends Activity {
     private WebView web;
     private String liveUrl = "";
     private boolean showingOffline;
+    private MirrorAudio audioBridge;
+    private boolean audioEnabled;
+    private ConversationIndicator micIndicator;
     private final Runnable retry = new Runnable() { public void run() { if (!liveUrl.isEmpty()) loadLive(); } };
     private final Runnable loadDeadline = new Runnable() { public void run() { fallback(); } };
 
@@ -53,7 +58,12 @@ public class ClockActivity extends Activity {
                 if (request.isForMainFrame() && !showingOffline) fallback();
             }
         });
-        setContentView(web);
+        FrameLayout frame=new FrameLayout(this);frame.addView(web);
+        micIndicator=new ConversationIndicator(this);
+        float density=getResources().getDisplayMetrics().density;
+        FrameLayout.LayoutParams badge=new FrameLayout.LayoutParams((int)(112*density),(int)(60*density),Gravity.TOP|Gravity.RIGHT);
+        badge.topMargin=(int)(24*density);badge.rightMargin=(int)(24*density);
+        frame.addView(micIndicator,badge);setContentView(frame);
         liveUrl = getPreferences(MODE_PRIVATE).getString("liveUrl", "");
         configure(getIntent());
     }
@@ -68,6 +78,9 @@ public class ClockActivity extends Activity {
         return ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) && uri.getHost() != null && uri.getUserInfo() == null;
     }
     private void configure(Intent intent) {
+        audioEnabled=intent.getBooleanExtra("audioBridge",false);
+        if(!audioEnabled&&audioBridge!=null){audioBridge.close();audioBridge=null;}
+        if(audioEnabled&&checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},42);
         String orientation = intent.getStringExtra("orientation");
         if (orientation == null) orientation = getPreferences(MODE_PRIVATE).getString("orientation", "portrait");
         orient(orientation);
@@ -98,6 +111,10 @@ public class ClockActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean focused) { super.onWindowFocusChanged(focused); if (focused) immersive(); }
     @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); configure(intent); }
     @Override public void onBackPressed() { finish(); }
+    @Override protected void onResume(){super.onResume();startAudioBridge();}
+    private void startAudioBridge(){if(audioEnabled&&audioBridge==null&&checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)==android.content.pm.PackageManager.PERMISSION_GRANTED)audioBridge=new MirrorAudio((phase,level)->runOnUiThread(()->micIndicator.update(phase,level)));}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants){super.onRequestPermissionsResult(request,permissions,grants);if(request==42)startAudioBridge();}
+    @Override protected void onPause(){if(audioBridge!=null){audioBridge.close();audioBridge=null;}super.onPause();}
     @Override public boolean onKeyDown(int key, KeyEvent event) {
         if (key == KeyEvent.KEYCODE_MENU) { menu(); return true; }
         return super.onKeyDown(key, event);

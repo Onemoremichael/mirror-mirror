@@ -13,7 +13,7 @@ trap 'rm -rf "$build_dir"' EXIT
 export JAVA_HOME="$java_root"
 cp "$repo_root/ux-lab/"{index.html,style.css,app.js} "$build_dir/assets/clock/"
 "$build_tools/aapt" package -f -M "$repo_root/clock-app/AndroidManifest.xml" -I "$android_jar" -A "$build_dir/assets" -F "$build_dir/base.apk"
-"$java_root/bin/javac" --release 8 -classpath "$android_jar" -d "$build_dir/classes" "$repo_root/clock-app/src/dev/mirror/clock/ClockActivity.java"
+"$java_root/bin/javac" --release 8 -classpath "$android_jar" -d "$build_dir/classes" "$repo_root/clock-app/src/dev/mirror/clock/"*.java
 "$java_root/bin/jar" cf "$build_dir/classes.jar" -C "$build_dir/classes" .
 "$build_tools/d8" --lib "$android_jar" --min-api 23 --output "$build_dir/dex" "$build_dir/classes.jar"
 (cd "$build_dir/dex" && "$build_tools/aapt" add "$build_dir/base.apk" classes.dex)

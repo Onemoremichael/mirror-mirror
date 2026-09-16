@@ -72,7 +72,13 @@ adb -s be9d0af shell am start -n dev.mirror.clock/.ClockActivity \
 ```
 
 Select **Mirror · USB** in the Mac companion and explicitly Start conversation.
-Only then does native AudioRecord open. AudioTrack plays replies on STREAM_MUSIC
+Or explicitly enable **Hey Mirror** wake listening in the updated companion; see
+`../looking-glass/docs/WAKE.md` for the local detector setup. Only manual Start or
+explicit standby enable opens AudioRecord. Standby sends PCM only to the Mac's
+local detector, not the cloud. A small static teal dot (no text) distinguishes standby
+from the “Connecting” label and active conversation. Turn wake microphone off to
+stop all capture; merely ending a wake conversation returns to standby.
+AudioTrack plays replies on STREAM_MUSIC
 at the existing volume. A native five-bar conversation glyph breathes in teal while
 listening and turns warm gold during audible replies, reacting to audio levels.
 Muted input uses a static amber pause glyph and “Muted” label. It disappears when
@@ -95,3 +101,11 @@ the spoken Mirror interaction worked. Far-field and echo robustness still need
 testing. See `../looking-glass/docs/MIRROR-AUDIO.md` for implementation,
 controls, limitations and test evidence. Prior installed APK is backed up locally
 at ignored `.work/afterglow-before-native-audio.apk`; no firmware was changed.
+
+The wake-capable handshake adds `wake:true`. Frame 15 sets local standby (0) or
+connecting (1); frame 10 restarts capture and frame 6 acknowledges it. The Mac drops
+old standby packets until that acknowledgment, preventing pre-wake audio uploads.
+Frame 16 plays a local readiness chime with a short 60 ms microphone gate; normal
+reply PCM retains its 350 ms echo tail.
+Wake detection runs on the Mac, not Android: no new native ML library or OS upgrade.
+Rollback for this wake update is `.work/afterglow-before-wake.apk` (ignored).

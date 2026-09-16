@@ -16,13 +16,18 @@ import org.json.JSONObject;
 /** Explicitly enabled, foreground-only USB audio. No WebView bridge or API key. */
 final class MirrorAudio {
     private volatile boolean closed, capturing, muted;
+    private volatile String localPhase;
     private volatile Socket socket;
     private DataOutputStream output;
     private AudioRecord recorder;
     private AudioTrack player;
     private AcousticEchoCanceler echo;
     private Thread captureThread, playThread;
-    private final ArrayBlockingQueue<byte[]> playback = new ArrayBlockingQueue<>(50);
+    private static final class PlaybackFrame {
+        final byte[] data;final boolean cue;
+        PlaybackFrame(byte[] data,boolean cue){this.data=data;this.cue=cue;}
+    }
+    private final ArrayBlockingQueue<PlaybackFrame> playback = new ArrayBlockingQueue<>(50);
     private volatile long speakerUntil;
     private long inputFrames, outputFrames;
     private int peak;
@@ -43,7 +48,7 @@ final class MirrorAudio {
                 s.setTcpNoDelay(true);s.setSoTimeout(5000);
                 output=new DataOutputStream(s.getOutputStream());
                 DataInputStream in=new DataInputStream(s.getInputStream());
-                send(1,new JSONObject().put("version",1).put("rate",16000).toString().getBytes("UTF-8"));
+                send(1,new JSONObject().put("version",1).put("rate",16000).put("wake",true).toString().getBytes("UTF-8"));
                 Thread heartbeat=new Thread(()->{
                     while(!closed&&socket==s&&!s.isClosed()) {
                         try {send(4,new byte[0]);Thread.sleep(1000);}catch(Exception e){try{s.close();}catch(Exception ignored){}break;}
@@ -53,13 +58,14 @@ final class MirrorAudio {
                     int type=in.readUnsignedByte(),size=in.readInt();
                     if(size<0||size>65536)throw new IOException("Invalid audio frame");
                     byte[] data=new byte[size];in.readFully(data);
-                    if(type==10)startAudio();
+                    if(type==10){stopAudio();localPhase=null;muted=false;startAudio();send(6,new byte[0]);}
+                    else if(type==15&&size==1){localPhase=data[0]==0?"standby":"connecting";muted=false;startAudio();indicator.accept(localPhase,0);}
                     else if(type==11)stopAudio();
                     else if(type==12){muted=size==1&&data[0]!=0;indicator.accept(muted?"muted":"listening",0);}
-                    else if(type==13&&capturing){
+                    else if((type==13||type==16)&&capturing){
                         if(size%2!=0)throw new IOException("Invalid PCM");
                         // Split provider chunks into bounded 20ms playback blocks.
-                        for(int i=0;i<size;i+=640){byte[] part=java.util.Arrays.copyOfRange(data,i,Math.min(i+640,size));if(!playback.offer(part))throw new IOException("Audio backlog");}
+                        for(int i=0;i<size;i+=640){byte[] part=java.util.Arrays.copyOfRange(data,i,Math.min(i+640,size));if(!playback.offer(new PlaybackFrame(part,type==16)))throw new IOException("Audio backlog");}
                     }
                 }
             } catch(Exception e) {if(!closed)Log.w("MirrorAudio","Audio link stopped: "+e.getClass().getSimpleName());}
@@ -80,7 +86,7 @@ final class MirrorAudio {
         player=new AudioTrack(AudioManager.STREAM_MUSIC,16000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(1280,AudioTrack.getMinBufferSize(16000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT)),AudioTrack.MODE_STREAM);
         if(player.getState()!=AudioTrack.STATE_INITIALIZED)throw new IOException("Speakers unavailable");
         muted=false;speakerUntil=0;inputFrames=outputFrames=0;capturing=true;
-        recorder.startRecording();player.play();indicator.accept("listening",0);
+        recorder.startRecording();player.play();indicator.accept(localPhase!=null?localPhase:"listening",0);
         captureThread=new Thread(()->{
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO);
             byte[] frame=new byte[640];int filled=0;
@@ -90,17 +96,19 @@ final class MirrorAudio {
                     double energy=0;peak=0;for(int i=0;i<frame.length;i+=2){int v=(short)((frame[i]&255)|(frame[i+1]<<8));energy+=(double)v*v;peak=Math.max(peak,Math.abs(v));}rms=Math.sqrt(energy/320);
                     boolean quiet=muted||SystemClock.elapsedRealtime()<speakerUntil;
                     send(2,quiet?new byte[640]:frame);inputFrames++;
-                    if(inputFrames%5==0){boolean speaking=SystemClock.elapsedRealtime()<speakerUntil;indicator.accept(muted?"muted":speaking?"speaking":"listening",muted?0:speaking?outputLevel:(float)Math.min(1,Math.max(0,(rms-60)/1800)));}
+                    if(inputFrames%5==0){boolean speaking=SystemClock.elapsedRealtime()<speakerUntil;indicator.accept(localPhase!=null?localPhase:muted?"muted":speaking?"speaking":"listening",muted?0:speaking?outputLevel:(float)Math.min(1,Math.max(0,(rms-60)/1800)));}
                     if(inputFrames%50==0)send(3,new JSONObject().put("capturing",true).put("playing",SystemClock.elapsedRealtime()<speakerUntil).put("rms",rms).put("peak",peak).put("inputFrames",inputFrames).put("outputFrames",outputFrames).toString().getBytes("UTF-8"));
                 }
             }catch(Exception e){if(capturing)fail();}
         },"mirror-microphone");
         playThread=new Thread(()->{
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO);
-            try {while(capturing){byte[] frame=playback.poll(100,java.util.concurrent.TimeUnit.MILLISECONDS);if(frame==null)continue;
+            try {while(capturing){PlaybackFrame block=playback.poll(100,java.util.concurrent.TimeUnit.MILLISECONDS);if(block==null)continue;byte[] frame=block.data;
                 // Live also streams silence. Only audible PCM gates the microphone.
                 int level=0;for(int i=0;i+1<frame.length;i+=2)level=Math.max(level,Math.abs((short)((frame[i]&255)|(frame[i+1]<<8))));
-                if(level>180)speakerUntil=SystemClock.elapsedRealtime()+350;
+                // Readiness tones are not speech: only a short tail, so the next
+                // request isn't clipped by the response's 350 ms echo gate.
+                if(level>180)speakerUntil=SystemClock.elapsedRealtime()+(block.cue?60:350);
                 outputLevel=Math.min(1,level/12000f);
                 int offset=0;while(offset<frame.length&&capturing){int n=player.write(frame,offset,frame.length-offset);if(n<=0)throw new IOException("Playback failed");offset+=n;}outputFrames++;}}
             catch(Exception e){if(capturing)fail();}

@@ -27,7 +27,9 @@ final class ConversationIndicator extends View {
         if(!phase.equals(next)){
             phase=next;
             motion=Settings.Global.getFloat(getContext().getContentResolver(),Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0;
-            setContentDescription("muted".equals(phase)?"Conversation active, microphone muted":
+            setContentDescription("standby".equals(phase)?"Local wake phrase listening; no cloud audio":
+                "connecting".equals(phase)?"Connecting; wait for the chime":
+                "muted".equals(phase)?"Conversation active, microphone muted":
                 "speaking".equals(phase)?"Assistant speaking, microphone temporarily suppressed":
                 "listening".equals(phase)?"Conversation active, microphone listening":"Microphone off");
             setVisibility("off".equals(phase)?GONE:VISIBLE);
@@ -40,6 +42,12 @@ final class ConversationIndicator extends View {
         long now=SystemClock.uptimeMillis();float dt=Math.min(100,Math.max(1,now-lastFrame));lastFrame=now;
         displayed+=(level-displayed)*Math.min(1,dt/110f);
         float cx=getWidth()/2f,cy=getHeight()/2f;
+        if("standby".equals(phase)){
+            // Quiet, text-free indication that local wake listening is armed.
+            paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(176,228,219));paint.setAlpha(150);
+            canvas.drawCircle(cx,cy,3*dp,paint);
+            return;
+        }
         boolean muted="muted".equals(phase),speaking="speaking".equals(phase);
         int color=muted?Color.rgb(231,185,121):speaking?Color.rgb(247,220,171):Color.rgb(176,228,219);
         // A restrained halo, not an opaque card. Black space remains reflective.
@@ -47,7 +55,12 @@ final class ConversationIndicator extends View {
         paint.setColor(color);paint.setAlpha(muted?75:45);
         canvas.drawRoundRect(cx-49*dp,cy-23*dp,cx+49*dp,cy+23*dp,23*dp,23*dp,paint);
         paint.setStyle(Paint.Style.FILL);paint.setAlpha(255);
-        if(muted){
+        if("connecting".equals(phase)){
+            paint.setTextSize(12*dp);paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+            paint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText("Connecting",cx,cy+4*dp,paint);
+            paint.setTextAlign(Paint.Align.LEFT);
+        }else if(muted){
             // Static pause mark plus a short readable label; never looks like listening.
             canvas.drawRoundRect(cx-31*dp,cy-7*dp,cx-28*dp,cy+7*dp,1.5f*dp,1.5f*dp,paint);
             canvas.drawRoundRect(cx-24*dp,cy-7*dp,cx-21*dp,cy+7*dp,1.5f*dp,1.5f*dp,paint);
@@ -63,6 +76,7 @@ final class ConversationIndicator extends View {
                 canvas.drawRoundRect(x-2.5f*dp,cy-h/2,x+2.5f*dp,cy+h/2,2.5f*dp,2.5f*dp,paint);
             }
         }
-        if(motion&&!muted&&isShown())postInvalidateDelayed(33);
+        if(motion&&!muted&&localAnimation()&&isShown())postInvalidateDelayed(33);
     }
+    private boolean localAnimation(){return !"standby".equals(phase)&&!"connecting".equals(phase);}
 }

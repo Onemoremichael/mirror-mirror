@@ -5,6 +5,10 @@ lululemon Studio MIRROR Model One a useful second life.
 
 ## Current result
 
+**Physical layout:** the LCD covers roughly the top two-thirds of the upright
+mirror; the bottom third is reflection-only. See [display geometry](DISPLAY-GEOMETRY.md)
+before designing UI.
+
 The tested unit now boots a reconstructed Android 6.0.1 desktop in 1080×1920
 portrait (native panel: 1920×1080) while retaining its original signed bootloader, boot image, kernel,
 recovery, and board-specific partitions. The recovered system has:
@@ -25,6 +29,10 @@ authorized Wi-Fi ADB at `192.168.0.51:5555` (verified September 6, 2026), with U
 available as a fallback. Screenshot previews can take several seconds over Wi-Fi.
 
 ## Afterglow clock
+
+For the separate voice-controlled assistant application, see
+[Looking Glass](LOOKING-GLASS.md). Application/voice work lives in its own repo;
+this repo continues to own the recovered hardware platform.
 
 The **Afterglow** Android app is a clock with subtle orbital geometry
 on black. It loads the web experiment from the Mac and includes a bundled clock

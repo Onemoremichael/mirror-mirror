@@ -1,7 +1,24 @@
 # mirror-mirror
 
-Tools, build notes, and a phone-friendly remote for giving a discontinued
-lululemon Studio MIRROR Model One a useful second life.
+Hardware research, historical recovery evidence, camera experiments and optional
+applications for the discontinued lululemon Studio MIRROR Model One.
+
+## Looking for Android recovery?
+
+Start with **[lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only)**.
+That dedicated project now owns the guided original-board Android recovery
+workflow: hardware checks, owner-specific ADB authorization, compatible userdata,
+image validation, recovery plans, Android setup and non-touch remote controls.
+Its [status page](https://github.com/Onemoremichael/lulu-mirror-software-only/blob/main/docs/STATUS.md)
+distinguishes tested recovery evidence from the remaining build and hardware
+acceptance work. There is no universal unlock or public firmware release yet.
+
+This repository keeps the original experiments, local build artifacts, camera
+research, existing installed remote service and Afterglow wrapper. Existing
+installations and integrations continue to work. The scripts below document the
+research checkpoint; use the dedicated recovery project for new installations.
+The voice assistant remains in
+[Looking Glass](https://github.com/Onemoremichael/looking-glass).
 
 ## Current result
 
@@ -32,7 +49,8 @@ available as a fallback. Screenshot previews can take several seconds over Wi-Fi
 
 For the separate voice-controlled assistant application, see
 [Looking Glass](LOOKING-GLASS.md). Application/voice work lives in its own repo;
-this repo continues to own the recovered hardware platform.
+the focused recovery workflow lives in lulu-mirror-software-only, while this
+repo retains hardware experiments and the wrapper used by existing installations.
 
 The **Afterglow** Android app is a clock with subtle orbital geometry
 on black. It loads the web experiment from the Mac and includes a bundled clock

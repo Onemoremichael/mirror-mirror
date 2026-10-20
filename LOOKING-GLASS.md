@@ -1,5 +1,11 @@
 # Looking Glass application boundary
 
+Owner-facing Android recovery and baseline remote controls now live in
+[lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only).
+This repository retains the Afterglow wrapper and hardware/camera research used
+by existing Looking Glass installations. The assistant remains independently
+developed in its own repository.
+
 Looking Glass's starter product scope is time/date, timers, to-dos, weather,
 read-only calendar review, and display controls. Its `docs/CAPABILITIES.md` and
 runtime catalog distinguish working local functions from planned integrations.

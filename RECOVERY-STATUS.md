@@ -1,5 +1,10 @@
 # Mirror recovery status
 
+For the maintained owner-facing recovery workflow, see
+[lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only).
+This document preserves the original unit's dated firmware and hardware evidence;
+it does not certify a newly built community recovery image.
+
 Current checkpoint: September 8, 2026 device logs. Historical candidates belong
 in [CAMERA-RECOVERY.md](CAMERA-RECOVERY.md), not this current-state snapshot.
 

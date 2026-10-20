@@ -1,5 +1,11 @@
 # Mirror Remote
 
+This is the existing research installation's remote. New Android recovery setups
+should use the focused
+[Android remote](https://github.com/Onemoremichael/lulu-mirror-software-only/blob/main/docs/REMOTE.md)
+in lulu-mirror-software-only. The service documented here remains available for
+owners who already installed it.
+
 The MIRROR panel is not a touchscreen. This local service turns a Mac
 connected by USB or authorized Wi-Fi ADB into a control bridge for Safari on the same Mac or an iPhone
 on the same Wi-Fi.
